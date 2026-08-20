@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7-labs
 # Merged build for Fly.io: combines container/builder.dockerfile and
 # container/dist.dockerfile into a single multi-stage Dockerfile, then adds
 # a Caddy stage that sits in front of SearXNG and enforces bearer-token auth.
