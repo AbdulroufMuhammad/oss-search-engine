@@ -1,4 +1,4 @@
-app = "..." # set by `fly launch`, or edit to your chosen app name
+app = "oss-search-engine"
 primary_region = "iad"
 
 [build]
