@@ -1,0 +1,127 @@
+# Merged build for Fly.io: combines container/builder.dockerfile and
+# container/dist.dockerfile into a single multi-stage Dockerfile, then adds
+# a Caddy stage that sits in front of SearXNG and enforces bearer-token auth.
+#
+# Build logic for the "builder" and "dist" stages is copied verbatim from
+# container/builder.dockerfile and container/dist.dockerfile — do not edit
+# those two stages without keeping them in sync with the originals.
+
+# ---------------------------------------------------------------------------
+# Stage: builder (== container/builder.dockerfile)
+# ---------------------------------------------------------------------------
+FROM docker.io/searxng/base:searxng-builder AS builder
+
+COPY ./requirements.txt ./requirements-server.txt ./
+
+ENV UV_NO_MANAGED_PYTHON="true"
+ENV UV_NATIVE_TLS="true"
+
+ARG TIMESTAMP_VENV="0"
+
+RUN --mount=type=cache,id=uv,target=/root/.cache/uv set -eux -o pipefail; \
+    export SOURCE_DATE_EPOCH="$TIMESTAMP_VENV"; \
+    uv venv; \
+    uv pip install --requirements ./requirements.txt --requirements ./requirements-server.txt; \
+    uv cache prune --ci; \
+    find ./.venv/lib/ -type f -exec strip --strip-unneeded {} + || true; \
+    find ./.venv/lib/ -type d -name "__pycache__" -exec rm -rf {} +; \
+    find ./.venv/lib/ -type f -name "*.pyc" -delete; \
+    python -m compileall -q -f -j 0 --invalidation-mode=unchecked-hash ./.venv/lib/; \
+    find ./.venv/lib/python*/site-packages/*.dist-info/ -type f -name "RECORD" -exec sort -t, -k1,1 -o {} {} \;; \
+    find ./.venv/ -exec touch -h --date="@$TIMESTAMP_VENV" {} +
+
+COPY --exclude=./searx/version_frozen.py ./searx/ ./searx/
+
+RUN set -eux -o pipefail; \
+    python -m compileall -q -f -j 0 --invalidation-mode=unchecked-hash ./searx/; \
+    find ./searx/static/ -type f \
+    \( -name "*.html" -o -name "*.css" -o -name "*.js" -o -name "*.svg" \) \
+    -exec gzip -9 -k {} + \
+    -exec brotli -9 -k {} + \
+    -exec gzip --test {}.gz + \
+    -exec brotli --test {}.br +
+
+# ---------------------------------------------------------------------------
+# Stage: dist (== container/dist.dockerfile)
+# ---------------------------------------------------------------------------
+FROM docker.io/searxng/base:searxng AS dist
+
+COPY --chown=977:977 --from=builder /usr/local/searxng/.venv/ ./.venv/
+COPY --chown=977:977 --from=builder /usr/local/searxng/searx/ ./searx/
+COPY --chown=977:977 ./container/ ./
+COPY --chown=977:977 ./searx/version_frozen.py ./searx/
+
+ARG CREATED="0001-01-01T00:00:00Z"
+ARG VERSION="unknown"
+ARG VCS_URL="unknown"
+ARG VCS_REVISION="unknown"
+
+LABEL org.opencontainers.image.created="$CREATED" \
+    org.opencontainers.image.description="SearXNG is a metasearch engine. Users are neither tracked nor profiled." \
+    org.opencontainers.image.documentation="https://docs.searxng.org/admin/installation-docker" \
+    org.opencontainers.image.licenses="AGPL-3.0-or-later" \
+    org.opencontainers.image.revision="$VCS_REVISION" \
+    org.opencontainers.image.source="$VCS_URL" \
+    org.opencontainers.image.title="SearXNG" \
+    org.opencontainers.image.url="https://searxng.org" \
+    org.opencontainers.image.version="$VERSION"
+
+ENV __SEARXNG_VERSION="$VERSION" \
+    __SEARXNG_SETTINGS_PATH="$__SEARXNG_CONFIG_PATH/settings.yml" \
+    GRANIAN_PROCESS_NAME="searxng" \
+    GRANIAN_INTERFACE="wsgi" \
+    GRANIAN_HOST="127.0.0.1" \
+    GRANIAN_PORT="8081" \
+    GRANIAN_WEBSOCKETS="false" \
+    GRANIAN_BLOCKING_THREADS="4" \
+    GRANIAN_WORKERS_KILL_TIMEOUT="30s" \
+    GRANIAN_BLOCKING_THREADS_IDLE_TIMEOUT="5m"
+
+# Bake in a real settings.yml (see container/settings.yml) instead of relying
+# on entrypoint.sh's generate-on-first-boot behavior against the template.
+COPY --chown=977:977 ./container/settings.yml "$__SEARXNG_CONFIG_PATH/settings.yml"
+
+# "*_PATH" ENVs are defined in base images
+VOLUME $__SEARXNG_CONFIG_PATH
+VOLUME $__SEARXNG_DATA_PATH
+
+# NOTE: 8080 is no longer EXPOSEd here — the "proxy" stage below owns the
+# externally reachable port and forwards to SearXNG on 127.0.0.1:8081.
+
+ENTRYPOINT ["/usr/local/searxng/entrypoint.sh"]
+
+# ---------------------------------------------------------------------------
+# Stage: caddy-bin — just a source of the caddy binary
+# ---------------------------------------------------------------------------
+# NOTE: searxng/base is Alpine-based, so the caddy binary is pulled from the
+# musl-linked caddy:2-alpine image for libc compatibility. If searxng/base
+# ever switches to a glibc distro, switch this to `docker.io/caddy:2` too.
+FROM docker.io/caddy:2-alpine AS caddy-bin
+
+# ---------------------------------------------------------------------------
+# Stage: proxy (final / default target) — SearXNG + Caddy bearer-token gate
+# ---------------------------------------------------------------------------
+# This is the image Fly.io builds and runs. Caddy binds the public port and
+# rejects any request that doesn't present a valid bearer token, then
+# reverse-proxies authorized requests to SearXNG on 127.0.0.1:8081.
+#
+# The token is provided at runtime via the AUTH_TOKEN env var, which should
+# be set as a Fly secret:
+#   fly secrets set AUTH_TOKEN=$(openssl rand -hex 32)
+# Callers must send: Authorization: Bearer <AUTH_TOKEN>
+FROM dist AS proxy
+
+# Stays root for the lifetime of the container: start.sh backgrounds
+# entrypoint.sh (which itself drops privilege where it can, e.g. chown) and
+# foregrounds caddy binding port 8080, so this stage doesn't switch back to
+# the non-root searxng user the base image normally runs as.
+USER root
+
+COPY --from=caddy-bin /usr/bin/caddy /usr/local/bin/caddy
+COPY ./container/Caddyfile /etc/caddy/Caddyfile
+COPY ./container/start.sh /usr/local/searxng/start.sh
+RUN chmod +x /usr/local/searxng/start.sh
+
+EXPOSE 8080
+
+ENTRYPOINT ["/usr/local/searxng/start.sh"]

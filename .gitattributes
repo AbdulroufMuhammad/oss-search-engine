@@ -1,3 +1,6 @@
+*.sh text eol=lf
+container/Caddyfile text eol=lf
+
 *.gif -diff
 *.png -diff
 *.min.css -diff

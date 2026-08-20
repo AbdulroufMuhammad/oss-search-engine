@@ -1,0 +1,27 @@
+# Reverse proxy in front of SearXNG that requires a bearer token.
+#
+# Fly.io terminates TLS at its edge and forwards plain HTTP to this
+# container's internal_port, so Caddy does not need to manage certificates
+# here.
+#
+# AUTH_TOKEN is supplied via a Fly secret:
+#   fly secrets set AUTH_TOKEN=$(openssl rand -hex 32)
+# Callers must send:
+#   Authorization: Bearer <AUTH_TOKEN>
+{
+    auto_https off
+    admin off
+}
+
+:8080 {
+    @authorized header Authorization "Bearer {$AUTH_TOKEN}"
+
+    # `route` forces these to run in the literal order written below —
+    # without it, Caddy's Caddyfile adapter reorders directives by a fixed
+    # priority list and the unconditional respond would always win over the
+    # matched reverse_proxy, making every request 401.
+    route {
+        reverse_proxy @authorized 127.0.0.1:8081
+        respond "unauthorized" 401
+    }
+}

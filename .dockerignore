@@ -2,5 +2,8 @@
 
 !container/*.template.*
 !container/entrypoint.sh
+!container/settings.yml
+!container/Caddyfile
+!container/start.sh
 !searx/**
 !requirements*.txt

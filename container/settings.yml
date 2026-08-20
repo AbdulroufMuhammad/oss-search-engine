@@ -1,0 +1,15 @@
+# Real (non-template) settings file baked into the Fly.io image.
+# Based on container/settings.template.yml.
+# Read the documentation before extending the defaults:
+# https://docs.searxng.org/admin/settings/
+
+use_default_settings: true
+
+server:
+  secret_key: "842dddd5ee609678e7ac765a176c2708cb127308eab5111afe9949af2eda1e15"
+  image_proxy: true
+
+search:
+  formats:
+    - html
+    - json
