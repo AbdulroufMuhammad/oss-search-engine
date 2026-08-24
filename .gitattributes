@@ -1,5 +1,6 @@
 *.sh text eol=lf
 container/Caddyfile text eol=lf
+container/transform.py text eol=lf
 
 *.gif -diff
 *.png -diff

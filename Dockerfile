@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.7-labs
+# syntax=docker/dockerfile:1.7-labs@sha256:b99fecfe00268a8b556fad7d9c37ee25d716ae08a5d7320e6d51c4dd83246894
 # Merged build for Fly.io: combines container/builder.dockerfile and
 # container/dist.dockerfile into a single multi-stage Dockerfile, then adds
 # a Caddy stage that sits in front of SearXNG and enforces bearer-token auth.
@@ -141,6 +141,7 @@ USER root
 COPY --from=caddy-bin /usr/bin/caddy /usr/local/bin/caddy
 COPY ./container/Caddyfile /etc/caddy/Caddyfile
 COPY ./container/start.sh /usr/local/searxng/start.sh
+COPY ./container/transform.py /usr/local/searxng/transform.py
 RUN chmod +x /usr/local/searxng/start.sh
 
 EXPOSE 8080

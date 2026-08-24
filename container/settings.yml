@@ -13,3 +13,11 @@ search:
   formats:
     - html
     - json
+
+# Disable engines that can never work in this deployment (no Tor/SOCKS proxy
+# configured), instead of letting them fail on every single request.
+engines:
+  - name: ahmia
+    disabled: true
+  - name: torch
+    disabled: true

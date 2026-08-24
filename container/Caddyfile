@@ -21,7 +21,7 @@
     # priority list and the unconditional respond would always win over the
     # matched reverse_proxy, making every request 401.
     route {
-        reverse_proxy @authorized 127.0.0.1:8081
+        reverse_proxy @authorized 127.0.0.1:8082
         respond "unauthorized" 401
     }
 }
