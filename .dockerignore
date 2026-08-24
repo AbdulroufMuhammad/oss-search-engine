@@ -5,6 +5,6 @@
 !container/settings.yml
 !container/Caddyfile
 !container/start.sh
-!container/transform.py
 !searx/**
 !requirements*.txt
+!api/**

@@ -13,6 +13,7 @@
 FROM docker.io/searxng/base:searxng-builder AS builder
 
 COPY ./requirements.txt ./requirements-server.txt ./
+COPY ./api/requirements.txt ./api-requirements.txt
 
 ENV UV_NO_MANAGED_PYTHON="true"
 ENV UV_NATIVE_TLS="true"
@@ -22,7 +23,7 @@ ARG TIMESTAMP_VENV="0"
 RUN --mount=type=cache,id=uv,target=/root/.cache/uv set -eux -o pipefail; \
     export SOURCE_DATE_EPOCH="$TIMESTAMP_VENV"; \
     uv venv; \
-    uv pip install --requirements ./requirements.txt --requirements ./requirements-server.txt; \
+    uv pip install --requirements ./requirements.txt --requirements ./requirements-server.txt --requirements ./api-requirements.txt; \
     uv cache prune --ci; \
     find ./.venv/lib/ -type f -exec strip --strip-unneeded {} + || true; \
     find ./.venv/lib/ -type d -name "__pycache__" -exec rm -rf {} +; \
@@ -50,6 +51,7 @@ FROM docker.io/searxng/base:searxng AS dist
 COPY --chown=977:977 --from=builder /usr/local/searxng/.venv/ ./.venv/
 COPY --chown=977:977 --from=builder /usr/local/searxng/searx/ ./searx/
 COPY --chown=977:977 ./container/ ./
+COPY --chown=977:977 ./api/ ./api/
 
 ARG CREATED="0001-01-01T00:00:00Z"
 ARG VERSION="unknown"
@@ -124,7 +126,9 @@ FROM docker.io/caddy:2-alpine AS caddy-bin
 # ---------------------------------------------------------------------------
 # This is the image Fly.io builds and runs. Caddy binds the public port and
 # rejects any request that doesn't present a valid bearer token, then
-# reverse-proxies authorized requests to SearXNG on 127.0.0.1:8081.
+# reverse-proxies authorized requests to the FastAPI intelligence gateway
+# (api/app.py) on 127.0.0.1:8083, which is the only thing that talks to
+# SearXNG directly (on 127.0.0.1:8081).
 #
 # The token is provided at runtime via the AUTH_TOKEN env var, which should
 # be set as a Fly secret:
@@ -141,7 +145,6 @@ USER root
 COPY --from=caddy-bin /usr/bin/caddy /usr/local/bin/caddy
 COPY ./container/Caddyfile /etc/caddy/Caddyfile
 COPY ./container/start.sh /usr/local/searxng/start.sh
-COPY ./container/transform.py /usr/local/searxng/transform.py
 RUN chmod +x /usr/local/searxng/start.sh
 
 EXPOSE 8080
