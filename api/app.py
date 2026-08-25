@@ -5,7 +5,7 @@ from fastapi import FastAPI
 
 from api.config import SEARXNG_UPSTREAM
 from api.providers.searxng import SearxngProvider
-from api.routes import analyze, extract, health, search
+from api.routes import analyze, extract, health, research, search
 
 
 @asynccontextmanager
@@ -23,3 +23,4 @@ app.include_router(search.router)
 app.include_router(health.router)
 app.include_router(extract.router)
 app.include_router(analyze.router)
+app.include_router(research.router)
