@@ -5,7 +5,7 @@ from fastapi import FastAPI
 
 from api.config import SEARXNG_UPSTREAM
 from api.providers.searxng import SearxngProvider
-from api.routes import health, search
+from api.routes import extract, health, search
 
 
 @asynccontextmanager
@@ -21,3 +21,4 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 app.include_router(search.router)
 app.include_router(health.router)
+app.include_router(extract.router)
