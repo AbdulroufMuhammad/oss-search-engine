@@ -8,4 +8,6 @@ class ProviderUnavailableError(Exception):
 
 
 class SearchProvider(Protocol):
-    async def search(self, query: str, *, max_results: int = 10) -> SearchResponse: ...
+    async def search(
+        self, query: str, *, max_results: int = 10, categories: str | None = None
+    ) -> SearchResponse: ...

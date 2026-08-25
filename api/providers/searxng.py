@@ -44,12 +44,17 @@ class SearxngProvider:
         self._base_url = base_url
         self._client = client
 
-    async def search(self, query: str, *, max_results: int = 10) -> SearchResponse:
+    async def search(
+        self, query: str, *, max_results: int = 10, categories: str | None = None
+    ) -> SearchResponse:
         start = time.monotonic()
+        params = {"q": query, "format": "json"}
+        if categories:
+            params["categories"] = categories
         try:
             resp = await self._client.get(
                 f"{self._base_url}/search",
-                params={"q": query, "format": "json"},
+                params=params,
                 timeout=20.0,
             )
             resp.raise_for_status()
