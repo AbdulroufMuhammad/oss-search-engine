@@ -8,13 +8,13 @@ router = APIRouter()
 
 
 @router.get("/v1/extract", response_model=Document)
-async def extract(request: Request, url: str):
+async def extract(request: Request, url: str, query: str | None = None, max_passages: int | None = None):
     if not url.strip():
         raise HTTPException(status_code=400, detail="url must not be empty")
 
     client = request.app.state.http_client
     try:
-        return await extract_document(url, client)
+        return await extract_document(url, client, query=query, max_passages=max_passages)
     except InvalidUrlError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except FetchError as exc:

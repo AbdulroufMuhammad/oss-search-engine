@@ -25,7 +25,10 @@ _WEIGHT_AUTHORITY = 0.25
 _WEIGHT_FRESHNESS = 0.15
 _WEIGHT_CONTENT_QUALITY = 0.15
 
-FRESHNESS_HALF_LIFE_DAYS = 30
+# exp(-age/FRESHNESS_DECAY_DAYS): at age == this many days, score is 1/e (~0.37),
+# not 0.5 — "decay constant"/"time constant", not a true half-life (which would
+# need a ln(2) factor). Named for what the code actually computes.
+FRESHNESS_DECAY_DAYS = 30
 
 
 def _tokenize(text: str) -> set[str]:
@@ -41,6 +44,21 @@ def keyword_relevance(query: str, title: str, content: str) -> float:
     return round(min(1.0, 0.7 * title_overlap + 0.3 * content_overlap), 4)
 
 
+def passage_relevance(query: str, passage: str) -> float:
+    """Score a single passage's lexical relevance to `query`.
+
+    A passage has no separate "title" concept the way a search result does.
+    Passing the passage itself as both the "title" and "content" arguments
+    makes the title-overlap and content-overlap terms identical (both just
+    "fraction of query tokens present in this passage"), so the 0.7/0.3
+    weights collapse to a single 1.0 weight and the result is simply that
+    overlap ratio, landing cleanly in [0, 1]. Kept as a thin wrapper rather
+    than calling `keyword_relevance` directly at call sites so the "how do
+    we score a passage" decision lives in one place.
+    """
+    return keyword_relevance(query, passage, passage)
+
+
 def freshness_score(published_at: str | None) -> float:
     if not published_at:
         return 0.5  # unknown date: neutral, not penalized
@@ -51,7 +69,7 @@ def freshness_score(published_at: str | None) -> float:
     except ValueError:
         return 0.5
     age_days = max(0.0, (datetime.now(timezone.utc) - dt).total_seconds() / 86400)
-    return round(math.exp(-age_days / FRESHNESS_HALF_LIFE_DAYS), 4)
+    return round(math.exp(-age_days / FRESHNESS_DECAY_DAYS), 4)
 
 
 def content_quality_score(title: str, content: str) -> float:

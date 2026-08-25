@@ -14,12 +14,46 @@ import json
 import httpx
 import trafilatura
 
-from api.models.document import Document
+from api.models.document import Document, Passage
+from shared.ranking import passage_relevance
 from shared.url_safety import UnsafeUrlError, assert_safe_url
 
 MAX_FETCH_BYTES = 10 * 1024 * 1024  # 10MB cap, avoids fetching e.g. mislabeled large media files
 FETCH_TIMEOUT = 15.0
 USER_AGENT = "Mozilla/5.0 (compatible; oss-search-engine/1.0; +https://oss-search-engine-gl6faa.fly.dev)"
+
+# Applied only when a query narrows intent and the caller didn't pass an
+# explicit max_passages — keeps "never return the entire article unless
+# requested" true without touching the no-query path at all.
+DEFAULT_QUERY_MAX_PASSAGES = 10
+
+
+def _split_passages(text: str) -> list[Passage]:
+    """Split `text` on "\\n" into passages, tracking char offsets into `text`
+    for each so that `text[p.start:p.end] == p.text` holds exactly.
+
+    Score defaults to a neutral, query-independent heuristic: relative
+    passage length, normalized the same way `content_quality_score` treats
+    content length (len/300 capped at 1.0). This is a placeholder-quality
+    signal, not a relevance signal — there's nothing to rank a passage
+    *against* when no query is given, so we fall back to "longer, more
+    substantive-looking passages score a bit higher" rather than a
+    meaningless constant. It's overwritten below when a query is supplied.
+    """
+    passages: list[Passage] = []
+    offset = 0
+    for part in text.split("\n"):
+        chunk_start = offset
+        offset += len(part) + 1  # +1 for the "\n" consumed by split
+        stripped = part.strip()
+        if not stripped:
+            continue
+        inner_offset = part.index(stripped)
+        start = chunk_start + inner_offset
+        end = start + len(stripped)
+        score = round(min(1.0, len(stripped) / 300), 4)
+        passages.append(Passage(text=stripped, score=score, start=start, end=end))
+    return passages
 
 
 class ExtractionError(Exception):
@@ -38,7 +72,12 @@ class NoContentError(ExtractionError):
     """The page fetched fine but no extractable article content was found."""
 
 
-async def extract(url: str, client: httpx.AsyncClient) -> Document:
+async def extract(
+    url: str,
+    client: httpx.AsyncClient,
+    query: str | None = None,
+    max_passages: int | None = None,
+) -> Document:
     try:
         assert_safe_url(url)
     except UnsafeUrlError as exc:
@@ -74,7 +113,18 @@ async def extract(url: str, client: httpx.AsyncClient) -> Document:
     if not text:
         raise NoContentError("no extractable article content found on this page")
 
-    passages = [p.strip() for p in text.split("\n") if p.strip()]
+    passages = _split_passages(text)
+
+    if query and query.strip():
+        for p in passages:
+            p.score = passage_relevance(query, p.text)
+        passages.sort(key=lambda p: p.score, reverse=True)
+        limit = max_passages if max_passages is not None else DEFAULT_QUERY_MAX_PASSAGES
+        passages = passages[:limit]
+    elif max_passages is not None:
+        # no query, but caller still asked for a cap: keep paragraph order,
+        # just truncate.
+        passages = passages[:max_passages]
 
     return Document(
         url=url,
