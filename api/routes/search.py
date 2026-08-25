@@ -14,22 +14,29 @@ async def search(
     q: str,
     max_results: int = 10,
     categories: str | None = None,
+    expand: bool = False,
 ):
     if not q.strip():
         raise HTTPException(status_code=400, detail="q must not be empty")
     max_results = max(1, min(50, max_results))
 
-    cached = cache.get(q, max_results, categories)
+    cached = cache.get(q, max_results, categories, expand)
     if cached is not None:
         response.headers["X-Cache"] = "HIT"
         return cached
 
     provider = request.app.state.searxng_provider
     try:
-        result = await provider.search(q, max_results=max_results, categories=categories)
+        if expand:
+            extra_queries = [f"{q} news", f"{q} latest"]
+            result = await provider.search_expanded(
+                q, max_results=max_results, categories=categories, extra_queries=extra_queries
+            )
+        else:
+            result = await provider.search(q, max_results=max_results, categories=categories)
     except ProviderUnavailableError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-    cache.set(q, max_results, result, categories)
+    cache.set(q, max_results, result, categories, expand)
     response.headers["X-Cache"] = "MISS"
     return result

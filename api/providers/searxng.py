@@ -1,3 +1,4 @@
+import asyncio
 import time
 
 import httpx
@@ -68,3 +69,52 @@ class SearxngProvider:
         out = _reshape(resp.json(), max_results)
         out.response_time = round(time.monotonic() - start, 3)
         return out
+
+    async def search_expanded(
+        self,
+        query: str,
+        *,
+        max_results: int = 10,
+        categories: str | None = None,
+        extra_queries: list[str] | None = None,
+    ) -> SearchResponse:
+        """Runs `query` plus each of `extra_queries` against SearXNG concurrently,
+        then merges/dedupes/re-ranks the combined results (System 2: parallel
+        multi-query search acquisition). This is rule-based fan-out, not
+        intent-aware expansion — that's System 1 (query intelligence), which
+        doesn't exist yet; the caller supplies the variant queries.
+        """
+        queries = [query, *(extra_queries or [])]
+        start = time.monotonic()
+        results = await asyncio.gather(
+            *(self.search(q, max_results=max_results, categories=categories) for q in queries),
+            return_exceptions=True,
+        )
+
+        responses = [r for r in results if isinstance(r, SearchResponse)]
+        if not responses:
+            # every variant failed the same way -> surface the first error
+            first_error = next(r for r in results if isinstance(r, Exception))
+            raise first_error
+
+        seen_urls: set[str] = set()
+        merged: list[SearchResult] = []
+        answer = None
+        for resp in responses:
+            if answer is None and resp.answer:
+                answer = resp.answer
+            for r in resp.results:
+                if r.url in seen_urls:
+                    continue
+                seen_urls.add(r.url)
+                merged.append(r)
+
+        merged.sort(key=lambda r: r.score, reverse=True)
+        merged = merged[:max_results]
+
+        return SearchResponse(
+            query=query,
+            answer=answer,
+            results=merged,
+            response_time=round(time.monotonic() - start, 3),
+        )
