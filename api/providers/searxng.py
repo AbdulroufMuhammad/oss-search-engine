@@ -4,6 +4,7 @@ import httpx
 
 from api.models.search import SearchResponse, SearchResult
 from api.providers.base import ProviderUnavailableError
+from shared.canonical_url import canonicalize_url
 
 CONTENT_TRUNCATE = 500
 
@@ -21,8 +22,11 @@ def _reshape(data: dict, max_results: int) -> SearchResponse:
     seen_urls: set[str] = set()
     cleaned: list[SearchResult] = []
     for r in data.get("results", []):
-        url = r.get("url")
-        if not url or url in seen_urls:
+        raw_url = r.get("url")
+        if not raw_url:
+            continue
+        url = canonicalize_url(raw_url)
+        if url in seen_urls:
             continue
         title = (r.get("title") or "").strip()
         content = (r.get("content") or "").strip()

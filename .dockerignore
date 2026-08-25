@@ -8,3 +8,4 @@
 !searx/**
 !requirements*.txt
 !api/**
+!shared/**

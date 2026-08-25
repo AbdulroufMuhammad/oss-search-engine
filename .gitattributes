@@ -1,6 +1,7 @@
 *.sh text eol=lf
 container/Caddyfile text eol=lf
 api/**/*.py text eol=lf
+shared/**/*.py text eol=lf
 
 *.gif -diff
 *.png -diff
