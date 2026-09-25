@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dashboard &middot; Seekly</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="container">
+    <div class="topbar">
+      <div class="brand">Seekly</div>
+      <div class="user-chip">
+        <span id="user-email"></span>
+        <button class="btn btn-ghost" id="logout-btn">Sign out</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="section-head">
+        <h2>API keys</h2>
+        <button class="btn btn-primary" id="new-key-btn">New API key</button>
+      </div>
+
+      <div id="keys-error" class="error-msg"></div>
+      <div id="keys-empty" class="empty-state hidden">
+        No API keys yet. Create one to start calling <code>/v1/search</code> and
+        <code>/v1/extract</code>.
+      </div>
+      <table id="keys-table" class="hidden">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Key</th>
+            <th>Rate limit</th>
+            <th>Status</th>
+            <th>Last used</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="keys-body"></tbody>
+      </table>
+    </div>
+
+    <footer>Seekly dashboard &middot; AGPL-3.0</footer>
+  </div>
+
+  <div class="modal-backdrop hidden" id="new-key-modal">
+    <div class="modal">
+      <h3>New API key</h3>
+      <form id="new-key-form">
+        <div class="field">
+          <label for="new-key-name">Name</label>
+          <input id="new-key-name" type="text" placeholder="e.g. production" required />
+        </div>
+        <div class="field">
+          <label for="new-key-rate-limit">Rate limit (requests/minute)</label>
+          <input id="new-key-rate-limit" type="number" min="1" placeholder="default: 300" />
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit">Create key</button>
+        </div>
+      </form>
+      <div class="error-msg" id="new-key-error"></div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="reveal-modal">
+    <div class="modal">
+      <h3>Your new API key</h3>
+      <p style="color: var(--text-dim); font-size: 0.88rem;">
+        Copy it now &mdash; for security, it won't be shown again.
+      </p>
+      <div class="key-reveal" id="reveal-key"></div>
+      <div class="form-actions">
+        <button class="btn btn-primary" id="reveal-close">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="api.js"></script>
+  <script>
+    if (!Auth.isLoggedIn()) {
+      window.location.href = "index.html";
+    }
+
+    document.getElementById("user-email").textContent = Auth.getEmail() || "";
+    document.getElementById("logout-btn").addEventListener("click", () => {
+      Auth.clearSession();
+      window.location.href = "index.html";
+    });
+
+    const keysError = document.getElementById("keys-error");
+    const keysEmpty = document.getElementById("keys-empty");
+    const keysTable = document.getElementById("keys-table");
+    const keysBody = document.getElementById("keys-body");
+
+    function formatDate(iso) {
+      if (!iso) return "never";
+      return new Date(iso).toLocaleString();
+    }
+
+    function renderKeys(keys) {
+      keysBody.innerHTML = "";
+      if (keys.length === 0) {
+        keysEmpty.classList.remove("hidden");
+        keysTable.classList.add("hidden");
+        return;
+      }
+      keysEmpty.classList.add("hidden");
+      keysTable.classList.remove("hidden");
+
+      for (const key of keys) {
+        const tr = document.createElement("tr");
+
+        const statusBadge = key.revoked
+          ? '<span class="badge badge-revoked">Revoked</span>'
+          : '<span class="badge badge-active">Active</span>';
+
+        tr.innerHTML = `
+          <td>${key.name}</td>
+          <td class="mono">${key.key_prefix}&hellip;</td>
+          <td>${key.rate_limit_per_minute}/min</td>
+          <td>${statusBadge}</td>
+          <td>${formatDate(key.last_used_at)}</td>
+          <td></td>
+        `;
+
+        if (!key.revoked) {
+          const actions = tr.lastElementChild;
+
+          const editBtn = document.createElement("button");
+          editBtn.className = "btn btn-ghost";
+          editBtn.textContent = "Edit limit";
+          editBtn.style.marginRight = "8px";
+          editBtn.addEventListener("click", async () => {
+            const next = prompt(`New rate limit (requests/minute) for "${key.name}":`, key.rate_limit_per_minute);
+            if (next === null) return;
+            const parsed = parseInt(next, 10);
+            if (!Number.isInteger(parsed) || parsed < 1) {
+              keysError.textContent = "Rate limit must be a positive whole number.";
+              return;
+            }
+            try {
+              await Api.updateKey(key.id, parsed);
+              await loadKeys();
+            } catch (err) {
+              keysError.textContent = err.message;
+            }
+          });
+          actions.appendChild(editBtn);
+
+          const revokeBtn = document.createElement("button");
+          revokeBtn.className = "btn btn-danger";
+          revokeBtn.textContent = "Revoke";
+          revokeBtn.addEventListener("click", async () => {
+            if (!confirm(`Revoke "${key.name}"? This can't be undone.`)) return;
+            try {
+              await Api.revokeKey(key.id);
+              await loadKeys();
+            } catch (err) {
+              keysError.textContent = err.message;
+            }
+          });
+          actions.appendChild(revokeBtn);
+        }
+
+        keysBody.appendChild(tr);
+      }
+    }
+
+    async function loadKeys() {
+      keysError.textContent = "";
+      try {
+        const keys = await Api.listKeys();
+        if (keys) renderKeys(keys);
+      } catch (err) {
+        keysError.textContent = err.message;
+      }
+    }
+
+    const newKeyModal = document.getElementById("new-key-modal");
+    const newKeyForm = document.getElementById("new-key-form");
+    const newKeyError = document.getElementById("new-key-error");
+    const revealModal = document.getElementById("reveal-modal");
+    const revealKey = document.getElementById("reveal-key");
+
+    document.getElementById("new-key-btn").addEventListener("click", () => {
+      document.getElementById("new-key-name").value = "";
+      document.getElementById("new-key-rate-limit").value = "";
+      newKeyError.textContent = "";
+      newKeyModal.classList.remove("hidden");
+    });
+
+    newKeyModal.addEventListener("click", (e) => {
+      if (e.target === newKeyModal) newKeyModal.classList.add("hidden");
+    });
+
+    newKeyForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const name = document.getElementById("new-key-name").value.trim();
+      const rateLimitRaw = document.getElementById("new-key-rate-limit").value.trim();
+      const rateLimit = rateLimitRaw ? parseInt(rateLimitRaw, 10) : undefined;
+      try {
+        const created = await Api.createKey(name, rateLimit);
+        newKeyModal.classList.add("hidden");
+        revealKey.textContent = created.key;
+        revealModal.classList.remove("hidden");
+        await loadKeys();
+      } catch (err) {
+        newKeyError.textContent = err.message;
+      }
+    });
+
+    document.getElementById("reveal-close").addEventListener("click", () => {
+      revealModal.classList.add("hidden");
+    });
+
+    loadKeys();
+  </script>
+</body>
+</html>

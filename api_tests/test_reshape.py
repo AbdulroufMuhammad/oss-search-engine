@@ -110,3 +110,50 @@ def test_long_content_truncated():
     out = _reshape(data, max_results=10)
     assert len(out.results[0].content) <= 503
     assert out.results[0].content.endswith("...")
+
+
+def test_include_domains_keeps_only_matching():
+    data = {
+        "query": "python",
+        "results": [
+            {"url": "https://docs.python.org/3/", "title": "Python docs", "content": "official docs"},
+            {"url": "https://example.com/py", "title": "Some blog", "content": "a blog post"},
+        ],
+    }
+    out = _reshape(data, max_results=10, include_domains=["python.org"])
+    assert [r.url for r in out.results] == ["https://docs.python.org/3"]
+
+
+def test_include_domains_matches_subdomains():
+    data = {
+        "query": "python",
+        "results": [
+            {"url": "https://docs.python.org/3/", "title": "Python docs", "content": "official docs"},
+        ],
+    }
+    out = _reshape(data, max_results=10, include_domains=["python.org"])
+    assert len(out.results) == 1
+
+
+def test_exclude_domains_drops_matching():
+    data = {
+        "query": "python",
+        "results": [
+            {"url": "https://docs.python.org/3/", "title": "Python docs", "content": "official docs"},
+            {"url": "https://example.com/py", "title": "Some blog", "content": "a blog post"},
+        ],
+    }
+    out = _reshape(data, max_results=10, exclude_domains=["python.org"])
+    assert [r.url for r in out.results] == ["https://example.com/py"]
+
+
+def test_no_domain_filters_keeps_everything():
+    data = {
+        "query": "python",
+        "results": [
+            {"url": "https://docs.python.org/3/", "title": "Python docs", "content": "official docs"},
+            {"url": "https://example.com/py", "title": "Some blog", "content": "a blog post"},
+        ],
+    }
+    out = _reshape(data, max_results=10)
+    assert len(out.results) == 2

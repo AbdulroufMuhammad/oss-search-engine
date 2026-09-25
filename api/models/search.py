@@ -17,8 +17,16 @@ class SearchResult(BaseModel):
     final_score: float = 0.0
 
 
+class ImageResult(BaseModel):
+    title: str
+    url: str  # source page the image was found on
+    image_url: str
+    thumbnail_url: str | None = None
+
+
 class SearchResponse(BaseModel):
     query: str
     answer: str | None = None
     results: list[SearchResult]
+    images: list[ImageResult] = []
     response_time: float

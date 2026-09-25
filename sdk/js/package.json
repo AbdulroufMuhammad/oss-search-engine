@@ -1,0 +1,15 @@
+{
+  "name": "seekly",
+  "version": "0.1.0",
+  "description": "JavaScript/TypeScript client for the internal Seekly search API",
+  "type": "module",
+  "main": "index.js",
+  "exports": "./index.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "license": "AGPL-3.0-or-later"
+}

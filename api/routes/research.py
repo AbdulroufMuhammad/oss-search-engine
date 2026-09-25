@@ -1,5 +1,7 @@
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
+from api.db_models import ApiKey
+from api.deps import get_api_key
 from api.models.research import ResearchResponse
 from api.research import DEFAULT_MAX_SOURCES_PER_SUBQUESTION, DEFAULT_MAX_SUBQUESTIONS
 from api.research import research as run_research
@@ -13,6 +15,7 @@ async def research(
     q: str,
     max_subquestions: int = DEFAULT_MAX_SUBQUESTIONS,
     max_sources_per_subquestion: int = DEFAULT_MAX_SOURCES_PER_SUBQUESTION,
+    api_key: ApiKey = Depends(get_api_key),
 ):
     if not q.strip():
         raise HTTPException(status_code=400, detail="q must not be empty")

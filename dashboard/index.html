@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Seekly</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="container">
+    <div class="topbar">
+      <div class="brand">Seekly</div>
+    </div>
+
+    <div class="hero">
+      <h1>Structured web search for AI agents</h1>
+      <p>
+        Sign up for an API key to start calling <code>/v1/search</code> and
+        <code>/v1/extract</code> — normalized results, deterministic ranking,
+        and LLM-synthesized answers, all from one endpoint.
+      </p>
+    </div>
+
+    <div class="card auth-card">
+      <div class="tabs">
+        <div class="tab active" data-tab="login">Sign in</div>
+        <div class="tab" data-tab="signup">Sign up</div>
+      </div>
+
+      <form id="login-form">
+        <div class="field">
+          <label for="login-email">Email</label>
+          <input id="login-email" type="email" required autocomplete="email" />
+        </div>
+        <div class="field">
+          <label for="login-password">Password</label>
+          <input id="login-password" type="password" required autocomplete="current-password" />
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit">Sign in</button>
+        </div>
+        <div class="error-msg" id="login-error"></div>
+      </form>
+
+      <form id="signup-form" class="hidden">
+        <div class="field">
+          <label for="signup-email">Email</label>
+          <input id="signup-email" type="email" required autocomplete="email" />
+        </div>
+        <div class="field">
+          <label for="signup-password">Password</label>
+          <input id="signup-password" type="password" required minlength="8" autocomplete="new-password" />
+          <label style="margin-top: 4px; font-weight: 400;">At least 8 characters.</label>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit">Create account</button>
+        </div>
+        <div class="error-msg" id="signup-error"></div>
+      </form>
+    </div>
+
+    <footer>Seekly dashboard &middot; AGPL-3.0</footer>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="api.js"></script>
+  <script>
+    if (Auth.isLoggedIn()) {
+      window.location.href = "dashboard.html";
+    }
+
+    const tabs = document.querySelectorAll(".tab");
+    const loginForm = document.getElementById("login-form");
+    const signupForm = document.getElementById("signup-form");
+
+    tabs.forEach((tab) => {
+      tab.addEventListener("click", () => {
+        tabs.forEach((t) => t.classList.remove("active"));
+        tab.classList.add("active");
+        const isLogin = tab.dataset.tab === "login";
+        loginForm.classList.toggle("hidden", !isLogin);
+        signupForm.classList.toggle("hidden", isLogin);
+      });
+    });
+
+    loginForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const errorEl = document.getElementById("login-error");
+      errorEl.textContent = "";
+      const email = document.getElementById("login-email").value.trim();
+      const password = document.getElementById("login-password").value;
+      try {
+        const { access_token } = await Api.login(email, password);
+        Auth.setSession(access_token, email);
+        window.location.href = "dashboard.html";
+      } catch (err) {
+        errorEl.textContent = err.message;
+      }
+    });
+
+    signupForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const errorEl = document.getElementById("signup-error");
+      errorEl.textContent = "";
+      const email = document.getElementById("signup-email").value.trim();
+      const password = document.getElementById("signup-password").value;
+      try {
+        const { access_token } = await Api.signup(email, password);
+        Auth.setSession(access_token, email);
+        window.location.href = "dashboard.html";
+      } catch (err) {
+        errorEl.textContent = err.message;
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+# Local dev dependency for the FastAPI api/ layer (not the legacy searx web
+# app — see container/docker-compose.yml for that). Gives you a real
+# Valkey/Redis to point VALKEY_URL at, matching what ElastiCache provides
+# in production, instead of running on the in-process fallback.
+#
+# Usage:
+#   docker compose -f docker-compose.dev.yml up -d
+#   export VALKEY_URL=redis://127.0.0.1:6379
+#   export DATABASE_URL=sqlite+aiosqlite:///./seekly.db
+#   export JWT_SECRET=dev-secret
+#   uvicorn api.app:app --reload
+
+name: seekly-api-dev
+
+services:
+  valkey:
+    image: docker.io/valkey/valkey:9-alpine
+    ports:
+      - "127.0.0.1:6379:6379"
+    command: valkey-server --save "" --appendonly no

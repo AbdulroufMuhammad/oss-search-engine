@@ -20,7 +20,7 @@ from shared.url_safety import UnsafeUrlError, assert_safe_url
 
 MAX_FETCH_BYTES = 10 * 1024 * 1024  # 10MB cap, avoids fetching e.g. mislabeled large media files
 FETCH_TIMEOUT = 15.0
-USER_AGENT = "Mozilla/5.0 (compatible; oss-search-engine/1.0; +https://oss-search-engine-gl6faa.fly.dev)"
+USER_AGENT = "Mozilla/5.0 (compatible; Seekly/1.0; +https://github.com/AbdulroufMuhammad/Seekly)"
 
 # Applied only when a query narrows intent and the caller didn't pass an
 # explicit max_passages — keeps "never return the entire article unless

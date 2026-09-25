@@ -3,7 +3,7 @@ import time
 
 import httpx
 
-from api.models.search import SearchResponse, SearchResult
+from api.models.search import ImageResult, SearchResponse, SearchResult
 from api.providers.base import ProviderUnavailableError
 from shared.canonical_url import canonicalize_url
 from shared.ranking import (
@@ -18,6 +18,7 @@ from shared.source_registry import authority_for_domain
 
 CONTENT_TRUNCATE = 500
 DUPLICATE_CONTENT_PENALTY = 0.5
+MAX_IMAGE_RESULTS = 10
 
 
 def _rank_and_sort(query: str, results: list[SearchResult], max_results: int) -> list[SearchResult]:
@@ -50,7 +51,43 @@ def _rank_and_sort(query: str, results: list[SearchResult], max_results: int) ->
     return results[:max_results]
 
 
-def _reshape(data: dict, max_results: int) -> SearchResponse:
+def _domain_matches(result_domain: str, filter_domain: str) -> bool:
+    filter_domain = filter_domain.lower().lstrip(".")
+    return result_domain == filter_domain or result_domain.endswith("." + filter_domain)
+
+
+def _filter_by_domain(
+    results: list[SearchResult],
+    include_domains: list[str] | None,
+    exclude_domains: list[str] | None,
+) -> list[SearchResult]:
+    """Post-filters by domain rather than relying on upstream query syntax
+    (e.g. `site:`), since that's engine-specific and not reliable across
+    every backend SearXNG might be configured with. Trade-off: since this
+    filters what SearXNG already returned rather than requesting more,
+    a narrow include_domains list can yield fewer than max_results.
+    """
+    if not include_domains and not exclude_domains:
+        return results
+
+    filtered = []
+    for r in results:
+        d = domain_of(r.url)
+        if include_domains and not any(_domain_matches(d, inc) for inc in include_domains):
+            continue
+        if exclude_domains and any(_domain_matches(d, exc) for exc in exclude_domains):
+            continue
+        filtered.append(r)
+    return filtered
+
+
+def _reshape(
+    data: dict,
+    max_results: int,
+    *,
+    include_domains: list[str] | None = None,
+    exclude_domains: list[str] | None = None,
+) -> SearchResponse:
     answer = None
     answers = data.get("answers") or []
     if answers:
@@ -83,6 +120,8 @@ def _reshape(data: dict, max_results: int) -> SearchResponse:
             )
         )
 
+    cleaned = _filter_by_domain(cleaned, include_domains, exclude_domains)
+
     query = data.get("query", "")
     cleaned = _rank_and_sort(query, cleaned, max_results)
 
@@ -95,12 +134,21 @@ class SearxngProvider:
         self._client = client
 
     async def search(
-        self, query: str, *, max_results: int = 10, categories: str | None = None
+        self,
+        query: str,
+        *,
+        max_results: int = 10,
+        categories: str | None = None,
+        time_range: str | None = None,
+        include_domains: list[str] | None = None,
+        exclude_domains: list[str] | None = None,
     ) -> SearchResponse:
         start = time.monotonic()
         params = {"q": query, "format": "json"}
         if categories:
             params["categories"] = categories
+        if time_range:
+            params["time_range"] = time_range
         try:
             resp = await self._client.get(
                 f"{self._base_url}/search",
@@ -111,9 +159,41 @@ class SearxngProvider:
         except (httpx.ConnectError, httpx.TimeoutException, httpx.HTTPStatusError) as exc:
             raise ProviderUnavailableError(f"searxng upstream unavailable: {exc}") from exc
 
-        out = _reshape(resp.json(), max_results)
+        out = _reshape(resp.json(), max_results, include_domains=include_domains, exclude_domains=exclude_domains)
         out.response_time = round(time.monotonic() - start, 3)
         return out
+
+    async def search_images(self, query: str, *, max_results: int = MAX_IMAGE_RESULTS) -> list[ImageResult]:
+        params = {"q": query, "format": "json", "categories": "images"}
+        try:
+            resp = await self._client.get(
+                f"{self._base_url}/search",
+                params=params,
+                timeout=20.0,
+            )
+            resp.raise_for_status()
+        except (httpx.ConnectError, httpx.TimeoutException, httpx.HTTPStatusError) as exc:
+            raise ProviderUnavailableError(f"searxng upstream unavailable: {exc}") from exc
+
+        seen: set[str] = set()
+        images: list[ImageResult] = []
+        for r in resp.json().get("results", []):
+            image_url = r.get("img_src")
+            page_url = r.get("url")
+            if not image_url or not page_url or image_url in seen:
+                continue
+            seen.add(image_url)
+            images.append(
+                ImageResult(
+                    title=(r.get("title") or "").strip(),
+                    url=page_url,
+                    image_url=image_url,
+                    thumbnail_url=r.get("thumbnail_src") or None,
+                )
+            )
+            if len(images) >= max_results:
+                break
+        return images
 
     async def search_expanded(
         self,
@@ -122,6 +202,8 @@ class SearxngProvider:
         max_results: int = 10,
         categories: str | None = None,
         extra_queries: list[str] | None = None,
+        include_domains: list[str] | None = None,
+        exclude_domains: list[str] | None = None,
     ) -> SearchResponse:
         """Runs `query` plus each of `extra_queries` against SearXNG concurrently,
         then merges/dedupes/re-ranks the combined results (System 2: parallel
@@ -132,7 +214,16 @@ class SearxngProvider:
         queries = [query, *(extra_queries or [])]
         start = time.monotonic()
         results = await asyncio.gather(
-            *(self.search(q, max_results=max_results, categories=categories) for q in queries),
+            *(
+                self.search(
+                    q,
+                    max_results=max_results,
+                    categories=categories,
+                    include_domains=include_domains,
+                    exclude_domains=exclude_domains,
+                )
+                for q in queries
+            ),
             return_exceptions=True,
         )
 

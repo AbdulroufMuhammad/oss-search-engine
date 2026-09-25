@@ -1,4 +1,6 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+from api.config import MAX_BATCH_EXTRACT_URLS
 
 
 class Passage(BaseModel):
@@ -24,3 +26,19 @@ class Document(BaseModel):
     word_count: int
     content: str
     passages: list[Passage]
+
+
+class BatchExtractRequest(BaseModel):
+    urls: list[str] = Field(min_length=1, max_length=MAX_BATCH_EXTRACT_URLS)
+    query: str | None = None
+    max_passages: int | None = None
+
+
+class BatchExtractItem(BaseModel):
+    url: str
+    document: Document | None = None
+    error: str | None = None
+
+
+class BatchExtractResponse(BaseModel):
+    results: list[BatchExtractItem]
