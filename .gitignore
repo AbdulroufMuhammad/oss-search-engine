@@ -2,6 +2,8 @@
 
 *.pyc
 */*.pyc
+__pycache__/
+.pytest_cache/
 *~
 *.swp
 geckodriver.log
@@ -24,6 +26,10 @@ gh-pages/
 .idea/
 
 searx/version_frozen.py
+
+# local SQLite DB used by the default DATABASE_URL (api/config.py)
+*.db
+*.db-journal
 .dir-locals.el
 
 .python-version

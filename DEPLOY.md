@@ -1,5 +1,12 @@
 # Deploying to Fly.io
 
+> **Note:** this `AUTH_TOKEN`/Caddy gate predates the app's own user
+> accounts and API keys (see the root `README.rst`) and covers the *whole*
+> app, including `/v1/auth/signup` and the dashboard — so self-service
+> signup doesn't work behind it without also handing out `AUTH_TOKEN`. If
+> you're deploying on AWS instead, see "Deploying on AWS" in `README.rst` —
+> that path drops this wrapper and uses the app's own auth as the gate.
+
 This repo builds a single image (root `Dockerfile`) containing SearXNG plus a
 Caddy reverse proxy that enforces a bearer-token check (`container/Caddyfile`,
 `container/start.sh`) — see those files for how the token gate works. Fly's
