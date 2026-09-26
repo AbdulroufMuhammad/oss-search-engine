@@ -63,6 +63,10 @@ class CrawlJob(Base):
     exclude_paths: Mapped[list | None] = mapped_column(JSON, nullable=True)
     select_domains: Mapped[list | None] = mapped_column(JSON, nullable=True)
     allow_external: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Natural-language link-following guidance - see api/llm/link_filter.py.
+    # The one crawl option with a real per-page LLM cost; None (default)
+    # means zero added calls.
+    instructions: Mapped[str | None] = mapped_column(String(500), nullable=True)
     status: Mapped[str] = mapped_column(String(10), nullable=False, default="queued")
     # "queued" | "running" | "done" | "failed"
     results: Mapped[list | None] = mapped_column(JSON, nullable=True)

@@ -44,6 +44,12 @@ class CrawlRequest(BaseModel):
     # SSRF guard before being fetched, since it's no longer a
     # caller-approved domain.
     allow_external: bool = False
+    # Natural-language guidance for which links to follow (e.g. "only
+    # follow links about pricing"). Costs one DeepSeek call per fetched
+    # page (up to max_pages for the whole job) to judge that page's
+    # candidate links against it - the one crawl option with a real
+    # per-job LLM cost. Unset (default) means zero added calls.
+    instructions: str | None = Field(default=None, max_length=500)
 
     _validate_select_paths = field_validator("select_paths")(_validate_patterns)
     _validate_exclude_paths = field_validator("exclude_paths")(_validate_patterns)
@@ -71,6 +77,7 @@ class CrawlJobOut(BaseModel):
     exclude_paths: list[str] | None = None
     select_domains: list[str] | None = None
     allow_external: bool = False
+    instructions: str | None = None
     status: str  # "queued" | "running" | "done" | "failed"
     error: str | None = None
     results: list[CrawlResultItem] | None = None

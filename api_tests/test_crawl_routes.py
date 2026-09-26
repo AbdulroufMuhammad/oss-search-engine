@@ -177,6 +177,59 @@ async def test_create_crawl_defaults_filter_fields_to_empty(client, monkeypatch)
     assert body["exclude_paths"] is None
     assert body["select_domains"] is None
     assert body["allow_external"] is False
+    assert body["instructions"] is None
+
+
+@pytest.mark.asyncio
+async def test_create_crawl_round_trips_instructions_when_enabled(client, monkeypatch):
+    monkeypatch.setattr(crawl_route, "run_job", _fake_run_job)
+    monkeypatch.setattr(crawl_route, "CRAWL_INSTRUCTIONS_ENABLED", True)
+    api_key = await _signup_and_get_key(client)
+
+    resp = await client.post(
+        "/v1/crawl",
+        json={"url": "https://example.com", "instructions": "only follow links about pricing"},
+        headers={"X-API-Key": api_key},
+    )
+    assert resp.status_code == 201
+    assert resp.json()["instructions"] == "only follow links about pricing"
+
+
+@pytest.mark.asyncio
+async def test_create_crawl_rejects_instructions_when_disabled_by_default(client):
+    """CRAWL_INSTRUCTIONS_ENABLED defaults to false - the one crawl option
+    with a real per-job LLM cost stays off until an operator opts in."""
+    api_key = await _signup_and_get_key(client)
+    resp = await client.post(
+        "/v1/crawl",
+        json={"url": "https://example.com", "instructions": "only follow links about pricing"},
+        headers={"X-API-Key": api_key},
+    )
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_create_crawl_without_instructions_ignores_the_disabled_flag(client, monkeypatch):
+    """The flag only matters when a caller actually sets instructions -
+    every other crawl option still works with it at its default (off)."""
+    monkeypatch.setattr(crawl_route, "run_job", _fake_run_job)
+    api_key = await _signup_and_get_key(client)
+
+    resp = await client.post(
+        "/v1/crawl", json={"url": "https://example.com"}, headers={"X-API-Key": api_key}
+    )
+    assert resp.status_code == 201
+
+
+@pytest.mark.asyncio
+async def test_create_crawl_rejects_instructions_over_max_length(client):
+    api_key = await _signup_and_get_key(client)
+    resp = await client.post(
+        "/v1/crawl",
+        json={"url": "https://example.com", "instructions": "x" * 501},
+        headers={"X-API-Key": api_key},
+    )
+    assert resp.status_code == 422
 
 
 @pytest.mark.asyncio

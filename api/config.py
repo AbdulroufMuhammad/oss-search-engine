@@ -71,6 +71,16 @@ DEFAULT_CRAWL_MAX_PAGES = int(os.environ.get("DEFAULT_CRAWL_MAX_PAGES", "20"))
 MAX_CRAWL_MAX_PAGES = int(os.environ.get("MAX_CRAWL_MAX_PAGES", "200"))
 DEFAULT_CRAWL_MAX_DEPTH = int(os.environ.get("DEFAULT_CRAWL_MAX_DEPTH", "2"))
 MAX_CRAWL_MAX_DEPTH = int(os.environ.get("MAX_CRAWL_MAX_DEPTH", "5"))
+
+# `instructions` (LLM-guided link filtering, see api/llm/link_filter.py) is
+# the one crawl/map option with a real per-job cost - up to max_pages
+# DeepSeek calls for a single job, not a flat fee like every other option
+# here. Off by default even though the request field/code path are fully
+# built and tested; an operator turns it on explicitly (once comfortable
+# with that cost) by setting this to true, rather than it being live the
+# moment someone happens to pass `instructions`.
+CRAWL_INSTRUCTIONS_ENABLED = os.environ.get("CRAWL_INSTRUCTIONS_ENABLED", "false").lower() == "true"
+
 CRAWL_JOB_TIMEOUT_SECONDS = float(os.environ.get("CRAWL_JOB_TIMEOUT_SECONDS", "120"))
 CRAWL_CONCURRENCY = int(os.environ.get("CRAWL_CONCURRENCY", "5"))
 CRAWL_FETCH_TIMEOUT_SECONDS = float(os.environ.get("CRAWL_FETCH_TIMEOUT_SECONDS", "10"))

@@ -305,3 +305,123 @@ async def test_run_job_wires_filter_fields_from_job_row_onto_spider(client, monk
     assert spider.check_external_links_safe is False
     assert [p.pattern for p in spider.select_path_patterns] == [r"^/blog/"]
     assert [p.pattern for p in spider.exclude_path_patterns] == [r"^/blog/drafts/"]
+    assert spider.instructions is None
+    assert spider._http_client is None  # no LLM client created when unset
+
+
+# --- instructions (LLM-guided link filtering) ---
+
+
+def test_configured_spider_has_no_instructions_by_default():
+    spider = _configured_spider()
+    assert spider.instructions is None
+    assert spider._http_client is None
+
+
+@pytest.mark.asyncio
+async def test_run_job_creates_and_closes_an_llm_client_only_when_instructions_set(client, monkeypatch):
+    import api.crawl as crawl_module
+
+    captured = {}
+
+    class _RecordingSpider:
+        def __init__(self):
+            self.last_error = None
+            captured["instance"] = self
+
+        async def stream(self):
+            return
+            yield  # pragma: no cover - makes this an async generator
+
+    monkeypatch.setattr(crawl_module, "_BoundedCrawlSpider", _RecordingSpider)
+
+    async with async_session() as session:
+        job = CrawlJob(
+            api_key_id=f"test-{uuid.uuid4().hex}",
+            mode="crawl",
+            start_url="https://example.com/start",
+            max_pages=5,
+            max_depth=1,
+            instructions="only follow links about pricing",
+        )
+        session.add(job)
+        await session.commit()
+        job_id = job.id
+
+    await run_job(job_id, timeout_seconds=5)
+
+    spider = captured["instance"]
+    assert spider.instructions == "only follow links about pricing"
+    assert spider._http_client is not None
+    assert spider._http_client.is_closed  # cleaned up after the job finished
+
+
+@pytest.mark.asyncio
+async def test_crawl_instructions_narrows_which_links_are_followed(crawl_fixture_url, monkeypatch):
+    """index.html links to page1.html and page2.html - instructions
+    filtering that only keeps page1 must exclude page2 (and page3, only
+    reachable through it isn't affected here since page1 stays in)."""
+    import api.crawl as crawl_module
+
+    async def fake_filter(instructions, page_title, candidates, http_client):
+        return [c for c in candidates if "page1" in c]
+
+    monkeypatch.setattr(crawl_module, "filter_links_by_instructions", fake_filter)
+
+    spider = _spider(crawl_fixture_url)
+    spider.max_pages = 10
+    spider.max_depth = 5
+    spider.extract_content = False
+    spider.instructions = "only follow page1"
+    spider._http_client = object()  # any truthy value - the fake never uses it
+
+    items = [item async for item in spider.stream()]
+    urls = {item["url"] for item in items}
+    assert f"{crawl_fixture_url}/page2.html" not in urls
+    assert f"{crawl_fixture_url}/page1.html" in urls
+
+
+@pytest.mark.asyncio
+async def test_crawl_instructions_skipped_when_no_http_client(crawl_fixture_url, monkeypatch):
+    """instructions alone, without an LLM client wired in (e.g. run_job
+    only creates one when instructions is actually set - this covers the
+    defensive case of one being set without the other), must not filter."""
+    import api.crawl as crawl_module
+
+    async def fail_if_called(*args, **kwargs):
+        raise AssertionError("filter_links_by_instructions should not be called without an http client")
+
+    monkeypatch.setattr(crawl_module, "filter_links_by_instructions", fail_if_called)
+
+    spider = _spider(crawl_fixture_url)
+    spider.max_pages = 10
+    spider.max_depth = 5
+    spider.extract_content = False
+    spider.instructions = "only follow page1"
+    spider._http_client = None
+
+    items = [item async for item in spider.stream()]
+    urls = {item["url"] for item in items}
+    assert f"{crawl_fixture_url}/page2.html" in urls  # unfiltered - all candidates followed
+
+
+@pytest.mark.asyncio
+async def test_crawl_instructions_fail_soft_keeps_all_candidates(crawl_fixture_url, monkeypatch):
+    import api.crawl as crawl_module
+
+    async def fake_filter(instructions, page_title, candidates, http_client):
+        return None  # simulates a DeepSeek failure
+
+    monkeypatch.setattr(crawl_module, "filter_links_by_instructions", fake_filter)
+
+    spider = _spider(crawl_fixture_url)
+    spider.max_pages = 10
+    spider.max_depth = 5
+    spider.extract_content = False
+    spider.instructions = "only follow page1"
+    spider._http_client = object()
+
+    items = [item async for item in spider.stream()]
+    urls = {item["url"] for item in items}
+    assert f"{crawl_fixture_url}/page2.html" in urls
+    assert f"{crawl_fixture_url}/page1.html" in urls

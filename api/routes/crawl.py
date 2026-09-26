@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.config import CRAWL_JOB_TIMEOUT_SECONDS
+from api.config import CRAWL_INSTRUCTIONS_ENABLED, CRAWL_JOB_TIMEOUT_SECONDS
 from api.crawl import run_job
 from api.db import get_session
 from api.db_models import ApiKey, CrawlJob
@@ -23,6 +23,11 @@ async def _create_job(
 ) -> CrawlJob:
     if not body.url.strip():
         raise HTTPException(status_code=400, detail="url must not be empty")
+    if body.instructions and not CRAWL_INSTRUCTIONS_ENABLED:
+        raise HTTPException(
+            status_code=400,
+            detail="instructions is disabled on this deployment (CRAWL_INSTRUCTIONS_ENABLED is not set)",
+        )
     try:
         assert_safe_url(body.url)
     except UnsafeUrlError as exc:
@@ -38,6 +43,7 @@ async def _create_job(
         exclude_paths=body.exclude_paths,
         select_domains=body.select_domains,
         allow_external=body.allow_external,
+        instructions=body.instructions,
     )
     session.add(job)
     await session.commit()

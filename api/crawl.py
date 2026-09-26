@@ -19,11 +19,13 @@ import re
 from datetime import datetime, timezone
 from urllib.parse import urlsplit
 
+import httpx
 from scrapling.spiders.links import LinkExtractor
 from scrapling.spiders.request import Request
 from scrapling.spiders.templates.crawler import CrawlSpider
 
 from api.config import CRAWL_CONCURRENCY
+from api.llm.link_filter import filter_links_by_instructions
 from shared.ranking import domain_of
 from shared.url_safety import UnsafeUrlError, assert_safe_url
 
@@ -50,12 +52,17 @@ class _BoundedCrawlSpider(CrawlSpider):
     # synchronous DNS lookup per discovered link would otherwise stall the
     # whole job).
     check_external_links_safe: bool = False
+    # Natural-language crawl instructions (e.g. "only follow links about
+    # pricing"). None (default) means zero added LLM calls - see
+    # api/llm/link_filter.py for the real per-page cost when this is set.
+    instructions: str | None = None
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._page_count = 0
         self._link_extractor = LinkExtractor()
         self.last_error: str | None = None
+        self._http_client: httpx.AsyncClient | None = None
 
     async def on_error(self, request, error):
         """Scrapling's engine retries and logs a failed request but never
@@ -88,11 +95,23 @@ class _BoundedCrawlSpider(CrawlSpider):
         if self.max_pages and self._page_count >= self.max_pages:
             return
 
+        candidates = []
         for url in self._link_extractor.extract(response):
             if not self._path_allowed(url):
                 continue
             if self.check_external_links_safe and not await self._is_safe_link(url):
                 continue
+            candidates.append(url)
+
+        if self.instructions and self._http_client and candidates:
+            page_title = str(response.css("title::text").get() or "").strip()
+            filtered = await filter_links_by_instructions(
+                self.instructions, page_title, candidates, self._http_client
+            )
+            if filtered is not None:
+                candidates = filtered
+
+        for url in candidates:
             yield response.follow(url, meta={"depth": depth + 1})
 
     def _path_allowed(self, url: str) -> bool:
@@ -148,6 +167,7 @@ async def run_job(job_id: str, timeout_seconds: float) -> None:
         allow_external = job.allow_external
         select_paths = job.select_paths
         exclude_paths = job.exclude_paths
+        instructions = job.instructions
 
     spider = _BoundedCrawlSpider()
     spider.start_urls = [start_url]
@@ -160,10 +180,15 @@ async def run_job(job_id: str, timeout_seconds: float) -> None:
     spider.extract_content = mode == "crawl"
     spider.robots_txt_obey = True
     spider.concurrent_requests = CRAWL_CONCURRENCY
+    spider.instructions = instructions
 
     results: list[dict] = []
     status = "done"
     error = None
+    # Only created when instructions filtering can actually run - the
+    # llm_client itself is the cost being opted into, not just the calls.
+    llm_client = httpx.AsyncClient() if instructions else None
+    spider._http_client = llm_client
     try:
         async with asyncio.timeout(timeout_seconds):
             async for item in spider.stream():
@@ -174,6 +199,9 @@ async def run_job(job_id: str, timeout_seconds: float) -> None:
         logger.exception("crawl job %s failed", job_id)
         status = "failed"
         error = str(exc)[:1000]
+    finally:
+        if llm_client is not None:
+            await llm_client.aclose()
 
     if status == "done" and not results and spider.last_error:
         status = "failed"
