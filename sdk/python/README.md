@@ -33,6 +33,11 @@ for r in resp.results:
 resp = client.search("rust async runtimes", include_raw_content=True)
 print(resp.results[0].raw_content)
 
+# re-judge the top results with a DeepSeek call for fuzzy/ambiguous queries
+resp = client.search("that thing about quantum computers and encryption", semantic_rerank=True)
+if resp.fallback_used:
+    print("served by the Tavily fallback, not Seekly's own upstream")
+
 doc = client.extract("https://example.com/article", query="pricing")
 print(doc.content)
 

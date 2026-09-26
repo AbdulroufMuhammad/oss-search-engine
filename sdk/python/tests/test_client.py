@@ -193,6 +193,32 @@ def test_search_sends_include_raw_content():
     assert session.last_request["params"]["include_raw_content"] is True
 
 
+def test_search_sends_semantic_rerank():
+    client, session = make_client(
+        FakeResponse(200, {"query": "q", "answer": None, "results": [], "images": [], "response_time": 0.1})
+    )
+    client.search("q", semantic_rerank=True)
+    assert session.last_request["params"]["semantic_rerank"] is True
+
+
+def test_search_response_exposes_fallback_used():
+    client, _ = make_client(
+        FakeResponse(
+            200,
+            {
+                "query": "q",
+                "answer": None,
+                "results": [],
+                "images": [],
+                "response_time": 0.1,
+                "fallback_used": True,
+            },
+        )
+    )
+    resp = client.search("q")
+    assert resp.fallback_used is True
+
+
 def test_crawl_sends_path_and_domain_filters():
     client, session = make_client(FakeResponse(201, _job_response()))
     client.crawl(

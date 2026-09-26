@@ -122,6 +122,11 @@ export class SeeklyClient {
    * @param {boolean} [options.includeRawContent=false] - attach each
    *   result's full extracted page text as `.raw_content` (fails soft to
    *   `null` per-URL) instead of a separate `extract` call.
+   * @param {boolean} [options.semanticRerank=false] - have a DeepSeek call
+   *   re-judge the top results for relevance before they're returned;
+   *   fails soft to the original order. The response's `fallback_used`
+   *   is true when a configured Tavily fallback served this query instead
+   *   of Seekly's own upstream (empty/weak result).
    */
   search(query, options = {}) {
     const {
@@ -135,6 +140,7 @@ export class SeeklyClient {
       topic = "general",
       includeImages = false,
       includeRawContent = false,
+      semanticRerank = false,
     } = options;
     return this._request("GET", "/v1/search", {
       params: {
@@ -149,6 +155,7 @@ export class SeeklyClient {
         topic,
         include_images: includeImages,
         include_raw_content: includeRawContent,
+        semantic_rerank: semanticRerank,
       },
     });
   }

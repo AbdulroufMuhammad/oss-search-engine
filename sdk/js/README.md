@@ -41,6 +41,14 @@ for (const r of resp.results) {
 const withRaw = await client.search("rust async runtimes", { includeRawContent: true });
 console.log(withRaw.results[0].raw_content);
 
+// re-judge the top results with a DeepSeek call for fuzzy/ambiguous queries
+const reranked = await client.search("that thing about quantum computers and encryption", {
+  semanticRerank: true,
+});
+if (reranked.fallback_used) {
+  console.log("served by the Tavily fallback, not Seekly's own upstream");
+}
+
 const doc = await client.extract("https://example.com/article", { query: "pricing" });
 console.log(doc.content);
 

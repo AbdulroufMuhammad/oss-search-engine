@@ -186,6 +186,30 @@ test("search sends includeRawContent as include_raw_content", async () => {
   assert.equal(url.searchParams.get("include_raw_content"), "true");
 });
 
+test("search sends semanticRerank as semantic_rerank", async () => {
+  const { client, calls } = makeClient({
+    json: { query: "q", answer: null, results: [], images: [], response_time: 0.1 },
+  });
+  await client.search("q", { semanticRerank: true });
+  const url = new URL(calls[0].url);
+  assert.equal(url.searchParams.get("semantic_rerank"), "true");
+});
+
+test("search response exposes fallback_used", async () => {
+  const { client } = makeClient({
+    json: {
+      query: "q",
+      answer: null,
+      results: [],
+      images: [],
+      response_time: 0.1,
+      fallback_used: true,
+    },
+  });
+  const resp = await client.search("q");
+  assert.equal(resp.fallback_used, true);
+});
+
 test("crawl sends path and domain filters", async () => {
   const { client, calls } = makeClient({ status: 201, json: jobResponse() });
   await client.crawl("https://example.com", {

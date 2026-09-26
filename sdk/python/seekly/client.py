@@ -129,13 +129,22 @@ class SeeklyClient:
         topic: str = "general",
         include_images: bool = False,
         include_raw_content: bool = False,
+        semantic_rerank: bool = False,
     ):
         """GET /v1/search. Returns an object with `.query`, `.answer`,
-        `.results` (list of result objects), `.images`, `.response_time`.
+        `.results` (list of result objects), `.images`, `.response_time`,
+        `.fallback_used`.
         Set `include_raw_content=True` to have each result carry the full
         extracted page text as `.raw_content` (fails soft to `None` per-URL,
         never fails the whole search) instead of making a separate `extract`
-        call yourself."""
+        call yourself.
+        Set `semantic_rerank=True` to have a DeepSeek call re-judge the top
+        results for relevance before they're returned - useful for
+        fuzzy/ambiguous queries where the deterministic ranking alone is
+        weaker. Fails soft to the original order if reranking fails.
+        `.fallback_used` is `True` when Seekly's own upstream came back
+        empty/weak and this response was served by a configured Tavily
+        fallback instead (see the server's TAVILY_API_KEY setting)."""
         params = {
             "q": query,
             "max_results": max_results,
@@ -148,6 +157,7 @@ class SeeklyClient:
             "topic": topic,
             "include_images": include_images,
             "include_raw_content": include_raw_content,
+            "semantic_rerank": semantic_rerank,
         }
         params = {k: v for k, v in params.items() if v is not None}
         return self._request("GET", "/v1/search", params=params)
