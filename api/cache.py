@@ -33,11 +33,12 @@ def _key(
     time_range: str | None = None,
     topic: str = "general",
     include_images: bool = False,
+    include_raw_content: bool = False,
 ) -> str:
     parts = (
         f"{query}:{max_results}:{categories or ''}:{expand}:{include_answer}:"
         f"{','.join(sorted(include_domains or []))}:{','.join(sorted(exclude_domains or []))}:"
-        f"{time_range or ''}:{topic}:{include_images}"
+        f"{time_range or ''}:{topic}:{include_images}:{include_raw_content}"
     )
     return hashlib.sha256(parts.encode()).hexdigest()
 
@@ -53,10 +54,11 @@ async def get(
     time_range: str | None = None,
     topic: str = "general",
     include_images: bool = False,
+    include_raw_content: bool = False,
 ) -> SearchResponse | None:
     key = _key(
         query, max_results, categories, expand, include_answer,
-        include_domains, exclude_domains, time_range, topic, include_images,
+        include_domains, exclude_domains, time_range, topic, include_images, include_raw_content,
     )
 
     valkey_client = valkeydb.client()
@@ -89,10 +91,11 @@ async def set(
     time_range: str | None = None,
     topic: str = "general",
     include_images: bool = False,
+    include_raw_content: bool = False,
 ) -> None:
     key = _key(
         query, max_results, categories, expand, include_answer,
-        include_domains, exclude_domains, time_range, topic, include_images,
+        include_domains, exclude_domains, time_range, topic, include_images, include_raw_content,
     )
 
     valkey_client = valkeydb.client()

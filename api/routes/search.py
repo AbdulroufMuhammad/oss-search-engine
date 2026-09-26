@@ -1,8 +1,11 @@
+import asyncio
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 
 from api import cache
 from api.db_models import ApiKey
 from api.deps import get_api_key
+from api.extraction import extract as extract_document
 from api.llm.deepseek import synthesize_answer
 from api.models.search import SearchResponse
 from api.providers.base import ProviderUnavailableError
@@ -45,6 +48,7 @@ async def search(
     time_range: str | None = None,
     topic: str = "general",
     include_images: bool = False,
+    include_raw_content: bool = False,
     api_key: ApiKey = Depends(get_api_key),
 ):
     if not q.strip():
@@ -65,7 +69,7 @@ async def search(
 
     cached = await cache.get(
         q, max_results, categories, expand, include_answer,
-        include_domains_list, exclude_domains_list, time_range, topic, include_images,
+        include_domains_list, exclude_domains_list, time_range, topic, include_images, include_raw_content,
     )
     if cached is not None:
         response.headers["X-Cache"] = "HIT"
@@ -101,6 +105,20 @@ async def search(
         except ProviderUnavailableError:
             result.images = []
 
+    if include_raw_content and result.results:
+        http_client = request.app.state.http_client
+
+        async def _fetch_raw_content(url: str) -> str | None:
+            try:
+                document = await extract_document(url, http_client)
+            except Exception:  # pylint: disable=broad-except
+                return None  # fails soft, same as batch extract's per-URL errors
+            return document.content
+
+        raw_contents = await asyncio.gather(*(_fetch_raw_content(r.url) for r in result.results))
+        for search_result, raw_content in zip(result.results, raw_contents):
+            search_result.raw_content = raw_content
+
     if include_answer:
         llm_answer = await synthesize_answer(q, result.results, request.app.state.http_client)
         if llm_answer is not None:
@@ -108,7 +126,7 @@ async def search(
 
     await cache.set(
         q, max_results, result, categories, expand, include_answer,
-        include_domains_list, exclude_domains_list, time_range, topic, include_images,
+        include_domains_list, exclude_domains_list, time_range, topic, include_images, include_raw_content,
     )
     response.headers["X-Cache"] = "MISS"
     return result

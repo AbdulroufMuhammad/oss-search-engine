@@ -7,6 +7,10 @@ class SearchResult(BaseModel):
     content: str
     published_at: str | None = None
     score: float = 0.0  # raw upstream relevance score, unchanged
+    # Only populated when the request set include_raw_content=true - the
+    # full extracted page text, so a caller doesn't need a second
+    # GET /v1/extract round-trip just to get it.
+    raw_content: str | None = None
 
     # System 5: our own deterministic ranking (see shared/ranking.py)
     relevance_score: float = 0.0
