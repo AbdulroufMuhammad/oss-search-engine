@@ -34,3 +34,7 @@ class SearchResponse(BaseModel):
     results: list[SearchResult]
     images: list[ImageResult] = []
     response_time: float
+    # True when Seekly's own upstream came back empty/weak and this
+    # response was served by the Tavily fallback instead - see
+    # api/providers/tavily.py. Always false unless TAVILY_API_KEY is set.
+    fallback_used: bool = False
