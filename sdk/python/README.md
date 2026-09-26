@@ -38,6 +38,10 @@ resp = client.search("that thing about quantum computers and encryption", semant
 if resp.fallback_used:
     print("served by the Tavily fallback, not Seekly's own upstream")
 
+# fetch each result's full page and re-score ranking from it, not the snippet
+resp = client.search("rust async runtimes", search_depth="advanced", chunks_per_source=3)
+print(resp.results[0].content_chunks)
+
 doc = client.extract("https://example.com/article", query="pricing")
 print(doc.content)
 
@@ -65,6 +69,11 @@ job = client.crawl(
     exclude_paths=[r"^/blog/drafts/"],
     select_domains=["blog.example.com"],
 )
+
+# natural-language link guidance - costs one DeepSeek call per fetched
+# page, and is off by default server-side (CRAWL_INSTRUCTIONS_ENABLED)
+# until an operator opts in, regardless of what's sent here
+job = client.crawl("https://example.com", instructions="only follow links about pricing")
 ```
 
 Responses are attribute-accessible objects built directly from the

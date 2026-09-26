@@ -49,6 +49,10 @@ if (reranked.fallback_used) {
   console.log("served by the Tavily fallback, not Seekly's own upstream");
 }
 
+// fetch each result's full page and re-score ranking from it, not the snippet
+const advanced = await client.search("rust async runtimes", { searchDepth: "advanced", chunksPerSource: 3 });
+console.log(advanced.results[0].content_chunks);
+
 const doc = await client.extract("https://example.com/article", { query: "pricing" });
 console.log(doc.content);
 
@@ -78,6 +82,13 @@ const filtered = await client.crawl("https://example.com", {
   selectPaths: ["^/blog/"],
   excludePaths: ["^/blog/drafts/"],
   selectDomains: ["blog.example.com"],
+});
+
+// natural-language link guidance - costs one DeepSeek call per fetched
+// page, and is off by default server-side (CRAWL_INSTRUCTIONS_ENABLED)
+// until an operator opts in, regardless of what's sent here
+const guided = await client.crawl("https://example.com", {
+  instructions: "only follow links about pricing",
 });
 ```
 

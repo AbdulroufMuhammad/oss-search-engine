@@ -244,3 +244,38 @@ def test_map_sends_path_and_domain_filters():
         "url": "https://example.com",
         "select_domains": ["other.example.com"],
     }
+
+
+def test_crawl_sends_instructions():
+    client, session = make_client(FakeResponse(201, _job_response()))
+    client.crawl("https://example.com", instructions="only follow links about pricing")
+    assert session.last_request["json"] == {
+        "url": "https://example.com",
+        "instructions": "only follow links about pricing",
+    }
+
+
+def test_search_sends_advanced_depth_options():
+    client, session = make_client(
+        FakeResponse(200, {"query": "q", "answer": None, "results": [], "images": [], "response_time": 0.1})
+    )
+    client.search(
+        "q",
+        search_depth="advanced",
+        chunks_per_source=3,
+        include_image_descriptions=True,
+        country="japan",
+    )
+    params = session.last_request["params"]
+    assert params["search_depth"] == "advanced"
+    assert params["chunks_per_source"] == 3
+    assert params["include_image_descriptions"] is True
+    assert params["country"] == "japan"
+
+
+def test_search_defaults_search_depth_to_basic():
+    client, session = make_client(
+        FakeResponse(200, {"query": "q", "answer": None, "results": [], "images": [], "response_time": 0.1})
+    )
+    client.search("q")
+    assert session.last_request["params"]["search_depth"] == "basic"

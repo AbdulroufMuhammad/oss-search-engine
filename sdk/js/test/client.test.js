@@ -235,3 +235,38 @@ test("map sends path and domain filters", async () => {
     select_domains: ["other.example.com"],
   });
 });
+
+test("crawl sends instructions", async () => {
+  const { client, calls } = makeClient({ status: 201, json: jobResponse() });
+  await client.crawl("https://example.com", { instructions: "only follow links about pricing" });
+  assert.deepEqual(JSON.parse(calls[0].init.body), {
+    url: "https://example.com",
+    instructions: "only follow links about pricing",
+  });
+});
+
+test("search sends advanced depth options", async () => {
+  const { client, calls } = makeClient({
+    json: { query: "q", answer: null, results: [], images: [], response_time: 0.1 },
+  });
+  await client.search("q", {
+    searchDepth: "advanced",
+    chunksPerSource: 3,
+    includeImageDescriptions: true,
+    country: "japan",
+  });
+  const url = new URL(calls[0].url);
+  assert.equal(url.searchParams.get("search_depth"), "advanced");
+  assert.equal(url.searchParams.get("chunks_per_source"), "3");
+  assert.equal(url.searchParams.get("include_image_descriptions"), "true");
+  assert.equal(url.searchParams.get("country"), "japan");
+});
+
+test("search defaults searchDepth to basic", async () => {
+  const { client, calls } = makeClient({
+    json: { query: "q", answer: null, results: [], images: [], response_time: 0.1 },
+  });
+  await client.search("q");
+  const url = new URL(calls[0].url);
+  assert.equal(url.searchParams.get("search_depth"), "basic");
+});

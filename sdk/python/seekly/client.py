@@ -130,6 +130,10 @@ class SeeklyClient:
         include_images: bool = False,
         include_raw_content: bool = False,
         semantic_rerank: bool = False,
+        search_depth: str = "basic",
+        chunks_per_source: int | None = None,
+        include_image_descriptions: bool = False,
+        country: str | None = None,
     ):
         """GET /v1/search. Returns an object with `.query`, `.answer`,
         `.results` (list of result objects), `.images`, `.response_time`,
@@ -144,7 +148,18 @@ class SeeklyClient:
         weaker. Fails soft to the original order if reranking fails.
         `.fallback_used` is `True` when Seekly's own upstream came back
         empty/weak and this response was served by a configured Tavily
-        fallback instead (see the server's TAVILY_API_KEY setting)."""
+        fallback instead (see the server's TAVILY_API_KEY setting).
+        Set `search_depth="advanced"` to fetch each result's full page
+        (absorbing `include_raw_content`'s job) and re-score ranking from
+        the full text instead of the snippet - a more accurate but slower
+        and pricier search than the `"basic"` default. `chunks_per_source`
+        (only meaningful with `search_depth="advanced"`) attaches up to N
+        query-relevant passages per result as `.content_chunks`.
+        `include_image_descriptions=True` mirrors each image's own title
+        into `.description` (no vision model call - nothing here does
+        actual image understanding). `country` is forwarded best-effort to
+        the upstream; whether it changes anything depends on the upstream's
+        own backend support."""
         params = {
             "q": query,
             "max_results": max_results,
@@ -158,6 +173,10 @@ class SeeklyClient:
             "include_images": include_images,
             "include_raw_content": include_raw_content,
             "semantic_rerank": semantic_rerank,
+            "search_depth": search_depth,
+            "chunks_per_source": chunks_per_source,
+            "include_image_descriptions": include_image_descriptions,
+            "country": country,
         }
         params = {k: v for k, v in params.items() if v is not None}
         return self._request("GET", "/v1/search", params=params)
@@ -200,6 +219,7 @@ class SeeklyClient:
         exclude_paths: list[str] | None = None,
         select_domains: list[str] | None = None,
         allow_external: bool | None = None,
+        instructions: str | None = None,
     ):
         """POST /v1/crawl. Starts a bounded crawl from `url`, following
         same-domain links and extracting each page's main content as
@@ -213,9 +233,16 @@ class SeeklyClient:
         drops the domain restriction entirely - every resulting link still
         goes through the same SSRF guard as `extract`, so it can't be used
         to reach internal/private addresses.
+
+        `instructions` is natural-language guidance for which links to
+        follow (e.g. "only follow links about pricing") - the one crawl
+        option with a real cost: one DeepSeek call per fetched page (up to
+        `max_pages` for the whole job) to judge that page's links against
+        it. Fails soft to following all otherwise-allowed links.
         """
         return self._create_crawl_job(
-            "/v1/crawl", url, max_pages, max_depth, select_paths, exclude_paths, select_domains, allow_external
+            "/v1/crawl", url, max_pages, max_depth, select_paths, exclude_paths,
+            select_domains, allow_external, instructions,
         )
 
     def get_crawl_job(self, job_id: str):
@@ -232,12 +259,14 @@ class SeeklyClient:
         exclude_paths: list[str] | None = None,
         select_domains: list[str] | None = None,
         allow_external: bool | None = None,
+        instructions: str | None = None,
     ):
         """POST /v1/map. Same job model and filter options as `crawl`, but
         discovers URLs without extracting page content - faster and
         cheaper. Poll `get_map_job(job.id)` for progress and results."""
         return self._create_crawl_job(
-            "/v1/map", url, max_pages, max_depth, select_paths, exclude_paths, select_domains, allow_external
+            "/v1/map", url, max_pages, max_depth, select_paths, exclude_paths,
+            select_domains, allow_external, instructions,
         )
 
     def get_map_job(self, job_id: str):
@@ -254,6 +283,7 @@ class SeeklyClient:
         exclude_paths: list[str] | None = None,
         select_domains: list[str] | None = None,
         allow_external: bool | None = None,
+        instructions: str | None = None,
     ):
         body: dict[str, Any] = {"url": url}
         if max_pages is not None:
@@ -268,4 +298,6 @@ class SeeklyClient:
             body["select_domains"] = select_domains
         if allow_external is not None:
             body["allow_external"] = allow_external
+        if instructions is not None:
+            body["instructions"] = instructions
         return self._request("POST", path, json=body)

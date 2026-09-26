@@ -127,6 +127,17 @@ export class SeeklyClient {
    *   fails soft to the original order. The response's `fallback_used`
    *   is true when a configured Tavily fallback served this query instead
    *   of Seekly's own upstream (empty/weak result).
+   * @param {"basic"|"advanced"} [options.searchDepth="basic"] - "advanced"
+   *   fetches each result's full page (absorbing includeRawContent's job)
+   *   and re-scores ranking from the full text instead of the snippet -
+   *   more accurate but slower and pricier than the default.
+   * @param {number} [options.chunksPerSource] - only meaningful with
+   *   searchDepth "advanced"; attaches up to N query-relevant passages
+   *   per result as `.content_chunks`.
+   * @param {boolean} [options.includeImageDescriptions=false] - mirrors
+   *   each image's own title into `.description` (no vision model call).
+   * @param {string} [options.country] - forwarded best-effort to the
+   *   upstream; whether it changes anything depends on its own backend.
    */
   search(query, options = {}) {
     const {
@@ -141,6 +152,10 @@ export class SeeklyClient {
       includeImages = false,
       includeRawContent = false,
       semanticRerank = false,
+      searchDepth = "basic",
+      chunksPerSource,
+      includeImageDescriptions = false,
+      country,
     } = options;
     return this._request("GET", "/v1/search", {
       params: {
@@ -156,6 +171,10 @@ export class SeeklyClient {
         include_images: includeImages,
         include_raw_content: includeRawContent,
         semantic_rerank: semanticRerank,
+        search_depth: searchDepth,
+        chunks_per_source: chunksPerSource,
+        include_image_descriptions: includeImageDescriptions,
+        country,
       },
     });
   }
@@ -215,6 +234,11 @@ export class SeeklyClient {
    * @param {boolean} [options.allowExternal] - follow links off the
    *   starting domain entirely; every such link still goes through the
    *   same SSRF guard as `extract`
+   * @param {string} [options.instructions] - natural-language guidance for
+   *   which links to follow (e.g. "only follow links about pricing") - the
+   *   one crawl option with a real cost: one DeepSeek call per fetched
+   *   page (up to maxPages for the whole job). Fails soft to following
+   *   all otherwise-allowed links.
    */
   crawl(url, options = {}) {
     return this._createCrawlJob("/v1/crawl", url, options);
@@ -237,6 +261,7 @@ export class SeeklyClient {
    * @param {string[]} [options.excludePaths]
    * @param {string[]} [options.selectDomains]
    * @param {boolean} [options.allowExternal]
+   * @param {string} [options.instructions]
    */
   map(url, options = {}) {
     return this._createCrawlJob("/v1/map", url, options);
@@ -250,7 +275,7 @@ export class SeeklyClient {
   _createCrawlJob(
     path,
     url,
-    { maxPages, maxDepth, selectPaths, excludePaths, selectDomains, allowExternal } = {}
+    { maxPages, maxDepth, selectPaths, excludePaths, selectDomains, allowExternal, instructions } = {}
   ) {
     const body = { url };
     if (maxPages !== undefined) body.max_pages = maxPages;
@@ -259,6 +284,7 @@ export class SeeklyClient {
     if (excludePaths !== undefined) body.exclude_paths = excludePaths;
     if (selectDomains !== undefined) body.select_domains = selectDomains;
     if (allowExternal !== undefined) body.allow_external = allowExternal;
+    if (instructions !== undefined) body.instructions = instructions;
     return this._request("POST", path, { body });
   }
 }
