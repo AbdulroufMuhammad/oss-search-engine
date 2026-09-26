@@ -22,7 +22,7 @@ import httpx
 from api.extraction import ExtractionError
 from api.extraction import extract as extract_document
 from api.models.research import Evidence, ResearchResponse
-from api.providers.searxng import SearxngProvider
+from api.providers.upstream import UpstreamSearchProvider
 from shared.query_intelligence import analyze_query
 from shared.ranking import domain_of
 
@@ -57,7 +57,7 @@ async def _extract_evidence(
 
 async def research(
     question: str,
-    provider: SearxngProvider,
+    provider: UpstreamSearchProvider,
     client: httpx.AsyncClient,
     *,
     max_subquestions: int = DEFAULT_MAX_SUBQUESTIONS,

@@ -1,4 +1,4 @@
-from api.providers.searxng import _reshape
+from api.providers.upstream import _reshape
 
 
 def test_dedup_same_canonical_url():

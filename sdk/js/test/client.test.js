@@ -101,7 +101,7 @@ test("429 throws RateLimitError with retryAfter", async () => {
 });
 
 test("other non-2xx throws APIError with statusCode", async () => {
-  const { client } = makeClient({ status: 502, json: { detail: "searxng upstream unavailable" } });
+  const { client } = makeClient({ status: 502, json: { detail: "upstream search engine unavailable" } });
   await assert.rejects(client.search("q"), (err) => {
     assert.ok(err instanceof APIError);
     assert.equal(err.statusCode, 502);
@@ -111,7 +111,7 @@ test("other non-2xx throws APIError with statusCode", async () => {
 });
 
 test("health returns parsed JSON", async () => {
-  const { client } = makeClient({ json: { searxng: "ok" } });
+  const { client } = makeClient({ json: { upstream: "ok" } });
   const resp = await client.health();
-  assert.equal(resp.searxng, "ok");
+  assert.equal(resp.upstream, "ok");
 });

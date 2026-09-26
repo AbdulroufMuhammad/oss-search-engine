@@ -63,9 +63,9 @@ def _filter_by_domain(
 ) -> list[SearchResult]:
     """Post-filters by domain rather than relying on upstream query syntax
     (e.g. `site:`), since that's engine-specific and not reliable across
-    every backend SearXNG might be configured with. Trade-off: since this
-    filters what SearXNG already returned rather than requesting more,
-    a narrow include_domains list can yield fewer than max_results.
+    every backend the upstream might be configured with. Trade-off: since
+    this filters what the upstream already returned rather than requesting
+    more, a narrow include_domains list can yield fewer than max_results.
     """
     if not include_domains and not exclude_domains:
         return results
@@ -128,7 +128,9 @@ def _reshape(
     return SearchResponse(query=query, answer=answer, results=cleaned, response_time=0.0)
 
 
-class SearxngProvider:
+class UpstreamSearchProvider:
+    """Talks to the configured upstream search engine's JSON search API."""
+
     def __init__(self, base_url: str, client: httpx.AsyncClient):
         self._base_url = base_url
         self._client = client
@@ -157,7 +159,7 @@ class SearxngProvider:
             )
             resp.raise_for_status()
         except (httpx.ConnectError, httpx.TimeoutException, httpx.HTTPStatusError) as exc:
-            raise ProviderUnavailableError(f"searxng upstream unavailable: {exc}") from exc
+            raise ProviderUnavailableError(f"upstream search engine unavailable: {exc}") from exc
 
         out = _reshape(resp.json(), max_results, include_domains=include_domains, exclude_domains=exclude_domains)
         out.response_time = round(time.monotonic() - start, 3)
@@ -173,7 +175,7 @@ class SearxngProvider:
             )
             resp.raise_for_status()
         except (httpx.ConnectError, httpx.TimeoutException, httpx.HTTPStatusError) as exc:
-            raise ProviderUnavailableError(f"searxng upstream unavailable: {exc}") from exc
+            raise ProviderUnavailableError(f"upstream search engine unavailable: {exc}") from exc
 
         seen: set[str] = set()
         images: list[ImageResult] = []
@@ -205,11 +207,12 @@ class SearxngProvider:
         include_domains: list[str] | None = None,
         exclude_domains: list[str] | None = None,
     ) -> SearchResponse:
-        """Runs `query` plus each of `extra_queries` against SearXNG concurrently,
-        then merges/dedupes/re-ranks the combined results (System 2: parallel
-        multi-query search acquisition). This is rule-based fan-out, not
-        intent-aware expansion — that's System 1 (query intelligence), which
-        doesn't exist yet; the caller supplies the variant queries.
+        """Runs `query` plus each of `extra_queries` against the upstream
+        concurrently, then merges/dedupes/re-ranks the combined results
+        (System 2: parallel multi-query search acquisition). This is
+        rule-based fan-out, not intent-aware expansion — that's System 1
+        (query intelligence), which doesn't exist yet; the caller supplies
+        the variant queries.
         """
         queries = [query, *(extra_queries or [])]
         start = time.monotonic()

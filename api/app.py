@@ -5,9 +5,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api import valkeydb
-from api.config import CORS_ALLOWED_ORIGINS, SEARXNG_UPSTREAM
+from api.config import CORS_ALLOWED_ORIGINS, UPSTREAM_SEARCH_URL
 from api.db import init_models
-from api.providers.searxng import SearxngProvider
+from api.providers.upstream import UpstreamSearchProvider
 from api.routes import analyze, auth, events, extract, finance, health, keys, research, search
 
 
@@ -17,8 +17,8 @@ async def lifespan(app: FastAPI):
     await valkeydb.initialize()
     client = httpx.AsyncClient()
     app.state.http_client = client
-    app.state.searxng_upstream = SEARXNG_UPSTREAM
-    app.state.searxng_provider = SearxngProvider(SEARXNG_UPSTREAM, client)
+    app.state.upstream_search_url = UPSTREAM_SEARCH_URL
+    app.state.search_provider = UpstreamSearchProvider(UPSTREAM_SEARCH_URL, client)
     yield
     await client.aclose()
 

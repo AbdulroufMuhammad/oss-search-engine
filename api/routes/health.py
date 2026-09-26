@@ -8,8 +8,8 @@ router = APIRouter()
 async def health(request: Request):
     client: httpx.AsyncClient = request.app.state.http_client
     try:
-        resp = await client.get(f"{request.app.state.searxng_upstream}/healthz", timeout=3.0)
-        searxng_ok = resp.status_code < 500
+        resp = await client.get(f"{request.app.state.upstream_search_url}/healthz", timeout=3.0)
+        upstream_ok = resp.status_code < 500
     except httpx.HTTPError:
-        searxng_ok = False
-    return {"searxng": "ok" if searxng_ok else "down"}
+        upstream_ok = False
+    return {"upstream": "ok" if upstream_ok else "down"}

@@ -13,6 +13,6 @@ async def search(request: Request, q: str, api_key: ApiKey = Depends(get_api_key
     if not q.strip():
         raise HTTPException(status_code=400, detail="q must not be empty")
 
-    provider = request.app.state.searxng_provider
+    provider = request.app.state.search_provider
     client = request.app.state.http_client
     return await finance_search(q, provider, client)

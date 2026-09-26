@@ -15,7 +15,7 @@ async def events(request: Request, q: str, max_results: int = 10, api_key: ApiKe
         raise HTTPException(status_code=400, detail="q must not be empty")
     max_results = max(1, min(30, max_results))
 
-    provider = request.app.state.searxng_provider
+    provider = request.app.state.search_provider
     client = request.app.state.http_client
     try:
         return await detect_events(q, provider, client, max_results=max_results)

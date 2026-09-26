@@ -6,7 +6,7 @@ class SearchResult(BaseModel):
     url: str
     content: str
     published_at: str | None = None
-    score: float = 0.0  # raw upstream (SearXNG) relevance score, unchanged
+    score: float = 0.0  # raw upstream relevance score, unchanged
 
     # System 5: our own deterministic ranking (see shared/ranking.py)
     relevance_score: float = 0.0

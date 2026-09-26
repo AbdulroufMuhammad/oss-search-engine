@@ -5,7 +5,7 @@ Combines three free, no-API-key sources into one response:
   - SEC filing search (10-K/10-Q/8-K/Form 4/etc via EDGAR full-text search,
     covering "SEC filing search", "regulatory search", and "insider search"
     since Form 4 -- insider transactions -- is just another form type)
-  - finance-biased news search (existing SearXNG search, categories=news)
+  - finance-biased news search (existing upstream search, categories=news)
 
 Deliberately does NOT include market/price data (quotes, OHLCV) or
 macroeconomic data (FRED etc.) -- both need a different provider and were
@@ -19,7 +19,7 @@ import time
 import httpx
 
 from api.models.finance import FinanceSearchResponse
-from api.providers.searxng import SearxngProvider
+from api.providers.upstream import UpstreamSearchProvider
 from shared.sec_edgar import company_recent_filings, lookup_company, search_filings
 
 FILING_FORMS = ["10-K", "10-Q", "8-K", "4"]
@@ -27,7 +27,7 @@ FILING_FORMS = ["10-K", "10-Q", "8-K", "4"]
 
 async def finance_search(
     query: str,
-    provider: SearxngProvider,
+    provider: UpstreamSearchProvider,
     client: httpx.AsyncClient,
     *,
     max_companies: int = 3,

@@ -1,7 +1,7 @@
 """Search response cache, Valkey/Redis-backed when available (shared across
 instances, so a cache hit on one AWS instance is a hit on all of them and
-SearXNG/DeepSeek aren't hit redundantly per-instance), falling back to an
-in-process dict otherwise.
+the upstream search engine/DeepSeek aren't hit redundantly per-instance),
+falling back to an in-process dict otherwise.
 """
 
 import hashlib

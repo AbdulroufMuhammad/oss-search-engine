@@ -7,11 +7,13 @@
 > you're deploying on AWS instead, see "Deploying on AWS" in `README.rst` —
 > that path drops this wrapper and uses the app's own auth as the gate.
 
-This repo builds a single image (root `Dockerfile`) containing SearXNG plus a
-Caddy reverse proxy that enforces a bearer-token check (`container/Caddyfile`,
-`container/start.sh`) — see those files for how the token gate works. Fly's
-public port (8080) is Caddy; SearXNG itself only listens on
-`127.0.0.1:8081` inside the container and is never directly reachable.
+This repo builds a single image (root `Dockerfile`) containing a
+SearXNG-based search engine (see the root README's *Credits* section) plus
+a Caddy reverse proxy that enforces a bearer-token check
+(`container/Caddyfile`, `container/start.sh`) — see those files for how the
+token gate works. Fly's public port (8080) is Caddy; the search engine
+itself only listens on `127.0.0.1:8081` inside the container and is never
+directly reachable.
 
 ## 1. Launch the app (no deploy yet)
 
@@ -29,7 +31,7 @@ fly secrets set AUTH_TOKEN=$(openssl rand -hex 32)
 ```
 
 Keep a copy of this value somewhere safe (e.g. a secrets manager) — you'll
-need to hand it to whatever service calls this SearXNG instance.
+need to hand it to whatever service calls this instance.
 
 ## 3. Deploy
 

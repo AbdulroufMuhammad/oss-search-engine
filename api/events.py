@@ -12,13 +12,13 @@ import time
 import httpx
 
 from api.models.event import Event, EventsResponse
-from api.providers.searxng import SearxngProvider
+from api.providers.upstream import UpstreamSearchProvider
 from shared.event_detection import detect_event
 
 
 async def detect_events(
     query: str,
-    provider: SearxngProvider,
+    provider: UpstreamSearchProvider,
     client: httpx.AsyncClient,
     *,
     max_results: int = 10,

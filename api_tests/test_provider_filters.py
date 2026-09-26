@@ -1,7 +1,7 @@
 import httpx
 import pytest
 
-from api.providers.searxng import SearxngProvider
+from api.providers.upstream import UpstreamSearchProvider
 
 
 @pytest.mark.asyncio
@@ -13,7 +13,7 @@ async def test_search_forwards_time_range_to_upstream():
         return httpx.Response(200, json={"query": "q", "results": []})
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        provider = SearxngProvider("http://searxng.local", client)
+        provider = UpstreamSearchProvider("http://upstream.local", client)
         await provider.search("q", time_range="week")
 
     assert captured["time_range"] == "week"
@@ -28,7 +28,7 @@ async def test_search_omits_time_range_when_not_given():
         return httpx.Response(200, json={"query": "q", "results": []})
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        provider = SearxngProvider("http://searxng.local", client)
+        provider = UpstreamSearchProvider("http://upstream.local", client)
         await provider.search("q")
 
     assert captured["has_time_range"] is False
@@ -62,7 +62,7 @@ async def test_search_images_parses_and_dedupes():
         )
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        provider = SearxngProvider("http://searxng.local", client)
+        provider = UpstreamSearchProvider("http://upstream.local", client)
         images = await provider.search_images("cats")
 
     assert len(images) == 1
@@ -86,7 +86,7 @@ async def test_search_images_respects_max_results():
         )
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        provider = SearxngProvider("http://searxng.local", client)
+        provider = UpstreamSearchProvider("http://upstream.local", client)
         images = await provider.search_images("cats", max_results=3)
 
     assert len(images) == 3

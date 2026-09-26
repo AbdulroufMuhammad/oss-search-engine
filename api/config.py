@@ -1,6 +1,6 @@
 import os
 
-SEARXNG_UPSTREAM = os.environ.get("SEARXNG_UPSTREAM", "http://127.0.0.1:8081")
+UPSTREAM_SEARCH_URL = os.environ.get("UPSTREAM_SEARCH_URL", "http://127.0.0.1:8081")
 CACHE_TTL_SECONDS = int(os.environ.get("CACHE_TTL_SECONDS", "300"))
 
 # Persistence (users + API keys). Defaults to a local SQLite file so the API

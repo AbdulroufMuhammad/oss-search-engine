@@ -71,7 +71,7 @@ async def search(
         response.headers["X-Cache"] = "HIT"
         return cached
 
-    provider = request.app.state.searxng_provider
+    provider = request.app.state.search_provider
     try:
         if expand:
             extra_queries = [f"{q} news", f"{q} latest"]

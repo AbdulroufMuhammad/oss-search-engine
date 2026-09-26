@@ -117,7 +117,7 @@ def test_429_raises_rate_limit_error_with_retry_after():
 
 
 def test_other_error_raises_api_error_with_status_code():
-    client, _ = make_client(FakeResponse(502, {"detail": "searxng upstream unavailable"}))
+    client, _ = make_client(FakeResponse(502, {"detail": "upstream search engine unavailable"}))
     with pytest.raises(APIError) as exc_info:
         client.search("q")
     assert exc_info.value.status_code == 502
@@ -125,6 +125,6 @@ def test_other_error_raises_api_error_with_status_code():
 
 
 def test_health_does_not_require_special_handling():
-    client, _ = make_client(FakeResponse(200, {"searxng": "ok"}))
+    client, _ = make_client(FakeResponse(200, {"upstream": "ok"}))
     resp = client.health()
-    assert resp.searxng == "ok"
+    assert resp.upstream == "ok"

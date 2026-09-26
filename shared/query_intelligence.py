@@ -167,7 +167,7 @@ def expand_queries(
     """Rule-based query expansion: 2-4 variants combining the original query
     with detected entities/topics and intent-specific modifiers. Same style
     as the hardcoded `f"{q} news"` / `f"{q} latest"` expansion already used
-    by `/v1/search?expand=true` (api/providers/searxng.py), just driven by
+    by `/v1/search?expand=true` (api/providers/upstream.py), just driven by
     the detected intent/entities instead of two fixed suffixes."""
     entity_str = " ".join(entities)
     topic_str = " ".join(topics[:2])

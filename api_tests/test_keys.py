@@ -81,7 +81,7 @@ async def test_search_without_api_key_rejected(client):
 
 @pytest.mark.asyncio
 async def test_search_with_valid_api_key_reaches_provider(client):
-    """No real SearXNG upstream is running in tests, so a valid key should
+    """No real upstream is running in tests, so a valid key should
     get past auth and fail at the provider (502), not at auth (401)."""
     token = await _signup(client)
     create = await client.post(

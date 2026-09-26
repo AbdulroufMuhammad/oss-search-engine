@@ -71,7 +71,7 @@ GET /v1/search
 |---------------------|---------|-----------|----------------------------------------------------------------------------------|
 | `q`                 | string  | —         | required                                                                          |
 | `max_results`       | int     | 10        | 1–50                                                                              |
-| `categories`        | string  | —         | comma-delimited, upstream SearXNG categories (e.g. `news,science`)               |
+| `categories`        | string  | —         | comma-delimited, upstream search-engine categories (e.g. `news,science`)               |
 | `expand`            | bool    | false     | fan out to `<q> news` + `<q> latest`, merge & re-rank                            |
 | `include_answer`    | bool    | false     | LLM-synthesized answer over the top results (costs a DeepSeek call — see §5)     |
 | `include_domains`   | string  | —         | comma-delimited (e.g. `python.org,docs.python.org`); matches domain or subdomain |
@@ -118,7 +118,7 @@ Responses are cached server-side (~5 min by default, see `X-Cache: HIT|MISS`
 response header) — identical repeated queries (same params) are cheap, so
 don't build your own caching layer on top unless you need longer TTLs.
 
-`include_domains`/`exclude_domains` are applied *after* SearXNG returns
+`include_domains`/`exclude_domains` are applied *after* the upstream returns
 results, not sent to it as a query filter (there's no reliable cross-engine
 way to do that) — so a narrow `include_domains` can leave you with fewer
 than `max_results` if few of the returned results matched. It's a filter on
@@ -170,7 +170,7 @@ actually failed.
 
 ## 5. LLM-synthesized answers (`include_answer=true`)
 
-By default `answer` is only populated when SearXNG's own upstream
+By default `answer` is only populated when the upstream's own
 infobox/instant-answer has something. Set `include_answer=true` to instead
 get a real synthesized answer (via DeepSeek) generated from the top results:
 
@@ -226,7 +226,7 @@ or `PATCH /v1/keys/{id}`.
 | 404    | key not found (on `/v1/keys/{id}` — wrong id or not yours) | check the id                               |
 | 422    | validation error (bad param shape/type, batch urls empty or over the cap), or extract found no content | fix input |
 | 429    | rate limited                                           | back off `Retry-After` seconds, retry         |
-| 502    | upstream (SearXNG) unavailable                         | transient — retry with backoff                |
+| 502    | upstream search engine unavailable                         | transient — retry with backoff                |
 
 Error bodies are `{"detail": "..."}`. Batch extract is the one exception:
 its per-URL failures (unreachable page, no content, etc.) show up as
@@ -299,7 +299,7 @@ const data = await resp.json();
 - Read the key from config/secrets, never commit it.
 - Use `include_answer=true` and `include_images=true` only where you
   actually use the result — they're the params that cost an extra upstream
-  call (DeepSeek, or a second SearXNG query, respectively).
+  call (DeepSeek, or a second upstream query, respectively).
 - For batch extract, check each item's `error`, not just the HTTP status —
   a 200 can still contain per-URL failures.
 - Treat `429` as expected, not exceptional — handle it, don't alert-page on it.

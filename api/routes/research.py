@@ -22,7 +22,7 @@ async def research(
     max_subquestions = max(1, min(5, max_subquestions))
     max_sources_per_subquestion = max(1, min(3, max_sources_per_subquestion))
 
-    provider = request.app.state.searxng_provider
+    provider = request.app.state.search_provider
     client = request.app.state.http_client
     return await run_research(
         q,

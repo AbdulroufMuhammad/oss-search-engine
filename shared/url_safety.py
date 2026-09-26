@@ -2,8 +2,8 @@
 
 Used by anything that fetches a caller-supplied URL (e.g. /v1/extract) — without
 this, an authenticated caller could use the fetcher to reach internal services
-(SearXNG on 127.0.0.1:8081, cloud metadata endpoints, etc.) that are otherwise
-not externally reachable.
+(the upstream search engine on 127.0.0.1:8081, cloud metadata endpoints, etc.)
+that are otherwise not externally reachable.
 """
 
 import ipaddress
