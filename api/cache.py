@@ -35,11 +35,16 @@ def _key(
     include_images: bool = False,
     include_raw_content: bool = False,
     semantic_rerank: bool = False,
+    search_depth: str = "basic",
+    chunks_per_source: int | None = None,
+    include_image_descriptions: bool = False,
+    country: str | None = None,
 ) -> str:
     parts = (
         f"{query}:{max_results}:{categories or ''}:{expand}:{include_answer}:"
         f"{','.join(sorted(include_domains or []))}:{','.join(sorted(exclude_domains or []))}:"
-        f"{time_range or ''}:{topic}:{include_images}:{include_raw_content}:{semantic_rerank}"
+        f"{time_range or ''}:{topic}:{include_images}:{include_raw_content}:{semantic_rerank}:"
+        f"{search_depth}:{chunks_per_source or ''}:{include_image_descriptions}:{country or ''}"
     )
     return hashlib.sha256(parts.encode()).hexdigest()
 
@@ -57,11 +62,16 @@ async def get(
     include_images: bool = False,
     include_raw_content: bool = False,
     semantic_rerank: bool = False,
+    search_depth: str = "basic",
+    chunks_per_source: int | None = None,
+    include_image_descriptions: bool = False,
+    country: str | None = None,
 ) -> SearchResponse | None:
     key = _key(
         query, max_results, categories, expand, include_answer,
         include_domains, exclude_domains, time_range, topic, include_images,
-        include_raw_content, semantic_rerank,
+        include_raw_content, semantic_rerank, search_depth, chunks_per_source,
+        include_image_descriptions, country,
     )
 
     valkey_client = valkeydb.client()
@@ -96,11 +106,16 @@ async def set(
     include_images: bool = False,
     include_raw_content: bool = False,
     semantic_rerank: bool = False,
+    search_depth: str = "basic",
+    chunks_per_source: int | None = None,
+    include_image_descriptions: bool = False,
+    country: str | None = None,
 ) -> None:
     key = _key(
         query, max_results, categories, expand, include_answer,
         include_domains, exclude_domains, time_range, topic, include_images,
-        include_raw_content, semantic_rerank,
+        include_raw_content, semantic_rerank, search_depth, chunks_per_source,
+        include_image_descriptions, country,
     )
 
     valkey_client = valkeydb.client()

@@ -194,6 +194,7 @@ class UpstreamSearchProvider:
         time_range: str | None = None,
         include_domains: list[str] | None = None,
         exclude_domains: list[str] | None = None,
+        country: str | None = None,
     ) -> SearchResponse:
         start = time.monotonic()
         params = {"q": query, "format": "json"}
@@ -201,6 +202,11 @@ class UpstreamSearchProvider:
             params["categories"] = categories
         if time_range:
             params["time_range"] = time_range
+        if country:
+            # Best-effort: forwarded as-is, honored only if the configured
+            # upstream instance/backends support it. An unsupported value
+            # is a safe no-op (SearXNG ignores unknown params), not an error.
+            params["country"] = country
         resp = await self._get_with_failover("/search", params)
 
         out = _reshape(resp.json(), max_results, include_domains=include_domains, exclude_domains=exclude_domains)
@@ -240,6 +246,7 @@ class UpstreamSearchProvider:
         extra_queries: list[str] | None = None,
         include_domains: list[str] | None = None,
         exclude_domains: list[str] | None = None,
+        country: str | None = None,
     ) -> SearchResponse:
         """Runs `query` plus each of `extra_queries` against the upstream
         concurrently, then merges/dedupes/re-ranks the combined results
@@ -258,6 +265,7 @@ class UpstreamSearchProvider:
                     categories=categories,
                     include_domains=include_domains,
                     exclude_domains=exclude_domains,
+                    country=country,
                 )
                 for q in queries
             ),
