@@ -79,6 +79,7 @@ GET /v1/search
 | `time_range`        | string  | —         | one of `day` / `week` / `month` / `year`                                        |
 | `topic`             | string  | `general` | `general` or `news` — `news` ensures the news category is included              |
 | `include_images`    | bool    | false     | also returns up to 10 image results in `images` (see §6)                        |
+| `include_raw_content` | bool  | false     | attach each result's full extracted page text as `raw_content` - skips a separate `GET /v1/extract` call per result. Fails soft per-URL (`raw_content: null`), never fails the search. |
 
 ```bash
 curl "https://<api-host>/v1/search?q=rust%20async%20runtimes&max_results=5" \
@@ -101,7 +102,8 @@ curl "https://<api-host>/v1/search?q=rust%20async%20runtimes&max_results=5" \
       "freshness_score": 0.61,
       "content_quality_score": 0.91,
       "duplicate_penalty": 0.0,
-      "final_score": 0.89
+      "final_score": 0.89,
+      "raw_content": null
     }
   ],
   "images": [],
@@ -213,6 +215,10 @@ poll — they never block on the crawl itself.
 | `url`       | string | —       | required; must be a public URL (private/loopback IPs and cloud metadata endpoints are rejected with `400`) |
 | `max_pages` | int    | 20      | 1–200                                             |
 | `max_depth` | int    | 2       | 0–5; 0 = only `url` itself                       |
+| `select_paths` | string[] | — | regex allowlist; a discovered link is only followed if its URL path matches at least one pattern. Up to 20. |
+| `exclude_paths` | string[] | — | regex denylist, checked after `select_paths`; a matching link is never followed. Up to 20. |
+| `select_domains` | string[] | — | extra domains (beyond `url`'s own) that links may follow into. Ignored when `allow_external` is set. Up to 20. |
+| `allow_external` | bool | false | follow links off the starting domain entirely, ignoring `select_domains`. Every such link still goes through the same SSRF guard as `url` itself, so it can't be used to reach a private/internal address. |
 
 `/v1/crawl` also extracts each page's main content as Markdown;
 `/v1/map` skips extraction (faster, cheaper) and only reports which URLs
@@ -244,6 +250,10 @@ curl "https://<api-host>/v1/crawl/<job_id>" -H "X-API-Key: sk_live_..."
   "start_url": "https://example.com",
   "max_pages": 20,
   "max_depth": 2,
+  "select_paths": null,
+  "exclude_paths": null,
+  "select_domains": null,
+  "allow_external": false,
   "status": "done",
   "error": null,
   "results": [
@@ -294,7 +304,7 @@ or `PATCH /v1/keys/{id}`.
 | 400    | bad request (empty `q`, invalid `topic`/`time_range`, or a crawl/map `url` that's unsafe/unreachable-by-policy) | fix the request |
 | 401    | missing/invalid/revoked API key, or bad JWT            | check your key; re-login for JWT endpoints    |
 | 404    | key not found (on `/v1/keys/{id}`), or crawl/map job not found / not yours | check the id                   |
-| 422    | validation error (bad param shape/type, batch urls empty or over the cap, `max_pages`/`max_depth` out of range), or extract found no content | fix input |
+| 422    | validation error (bad param shape/type, batch urls empty or over the cap, `max_pages`/`max_depth` out of range, invalid `select_paths`/`exclude_paths` regex, or too many patterns/domains), or extract found no content | fix input |
 | 429    | rate limited                                           | back off `Retry-After` seconds, retry         |
 | 502    | upstream search engine unavailable                         | transient — retry with backoff                |
 

@@ -159,6 +159,11 @@ Request parameters:
   images-category query and returns up to 10 results in the ``images``
   field. Failures here degrade to an empty list rather than failing the
   whole search.
+- ``include_raw_content``: boolean, default ``false`` — when true, each
+  result also carries its full extracted page text as ``raw_content``
+  (same extraction ``GET /v1/extract`` uses), so callers don't need a
+  second round-trip per result. A single URL's extraction failing leaves
+  that result's ``raw_content`` as ``null`` rather than failing the search.
 
 The ``expand`` flag performs a multi-query fan-out using the original query plus
 ``<query> news`` and ``<query> latest`` and then merges and re-ranks the results.
@@ -182,7 +187,8 @@ Response model:
          "freshness_score": 0.61,
          "content_quality_score": 0.91,
          "duplicate_penalty": 0.0,
-         "final_score": 0.89
+         "final_score": 0.89,
+         "raw_content": null
        }
      ],
      "images": [
@@ -313,6 +319,20 @@ immediately in ``queued`` status rather than blocking on the crawl itself.
 ``2``, range ``0..5``) bound the job; ``url`` goes through the same
 SSRF/private-network check as ``/v1/extract``.
 
+Optional filters, both taking up to 20 entries:
+
+- ``select_paths`` / ``exclude_paths``: regex patterns matched against
+  each discovered link's URL path. ``select_paths`` is an allowlist (a
+  link must match at least one); ``exclude_paths`` is a denylist, checked
+  after ``select_paths``.
+- ``select_domains``: extra domains (beyond ``url``'s own) that links are
+  allowed to follow into. Ignored when ``allow_external`` is set.
+- ``allow_external`` (boolean, default ``false``): follow links off the
+  starting domain entirely, ignoring ``select_domains``. Every such link
+  still goes through the same SSRF guard as ``url`` itself, so this can't
+  be used to reach a private/internal address even though it opens up
+  which public domains get crawled.
+
 Poll ``GET /v1/crawl/{id}`` or ``GET /v1/map/{id}`` for status/results:
 
 .. code-block:: json
@@ -323,6 +343,10 @@ Poll ``GET /v1/crawl/{id}`` or ``GET /v1/map/{id}`` for status/results:
      "start_url": "https://example.com",
      "max_pages": 20,
      "max_depth": 2,
+     "select_paths": null,
+     "exclude_paths": null,
+     "select_domains": null,
+     "allow_external": false,
      "status": "done",
      "error": null,
      "results": [
