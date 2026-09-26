@@ -41,6 +41,19 @@ CORS_ALLOWED_ORIGINS = [
 # keeps a single request's fan-out (and its response size) bounded.
 MAX_BATCH_EXTRACT_URLS = int(os.environ.get("MAX_BATCH_EXTRACT_URLS", "20"))
 
+# Crawl/map jobs (POST /v1/crawl, POST /v1/map) run as bounded in-process
+# background tasks - no separate worker to deploy. These caps are what
+# keeps that safe: a job can never fetch more than DEFAULT/MAX pages, go
+# deeper than DEFAULT/MAX depth, or run longer than the timeout, no matter
+# what a caller asks for.
+DEFAULT_CRAWL_MAX_PAGES = int(os.environ.get("DEFAULT_CRAWL_MAX_PAGES", "20"))
+MAX_CRAWL_MAX_PAGES = int(os.environ.get("MAX_CRAWL_MAX_PAGES", "200"))
+DEFAULT_CRAWL_MAX_DEPTH = int(os.environ.get("DEFAULT_CRAWL_MAX_DEPTH", "2"))
+MAX_CRAWL_MAX_DEPTH = int(os.environ.get("MAX_CRAWL_MAX_DEPTH", "5"))
+CRAWL_JOB_TIMEOUT_SECONDS = float(os.environ.get("CRAWL_JOB_TIMEOUT_SECONDS", "120"))
+CRAWL_CONCURRENCY = int(os.environ.get("CRAWL_CONCURRENCY", "5"))
+CRAWL_FETCH_TIMEOUT_SECONDS = float(os.environ.get("CRAWL_FETCH_TIMEOUT_SECONDS", "10"))
+
 # DeepSeek is used for LLM-synthesized search answers (`include_answer=true`).
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
 DEEPSEEK_BASE_URL = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")

@@ -7,3 +7,11 @@ bcrypt
 pyjwt
 email-validator
 valkey
+
+# Crawl/map (POST /v1/crawl, POST /v1/map): fetching, link discovery, and
+# robots.txt compliance. Deliberately NOT using scrapling[fetchers]'s
+# browser-based fetchers (StealthyFetcher/DynamicFetcher, which need
+# Playwright/patchright + an actual browser binary) - only the plain
+# HTTP-based Fetcher/spider engine, which is what api/crawl.py uses.
+scrapling[fetchers]
+markdownify

@@ -8,7 +8,7 @@ from api import valkeydb
 from api.config import CORS_ALLOWED_ORIGINS, UPSTREAM_SEARCH_URL
 from api.db import init_models
 from api.providers.upstream import UpstreamSearchProvider
-from api.routes import analyze, auth, events, extract, finance, health, keys, research, search
+from api.routes import analyze, auth, crawl, events, extract, finance, health, keys, research, search
 
 
 @asynccontextmanager
@@ -40,3 +40,4 @@ app.include_router(analyze.router)
 app.include_router(research.router)
 app.include_router(finance.router)
 app.include_router(events.router)
+app.include_router(crawl.router)
