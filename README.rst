@@ -22,8 +22,9 @@ clients to scrape raw HTML or re-derive relevance heuristics.
 
 **Integrating an app against this API?** See ``API_GUIDE.md`` — auth,
 endpoints, rate limits, error handling, and copy-paste code samples. (It
-covers search/extract/filters/SDKs in depth; the analyze/research/finance/
-events endpoints below use the same auth and are additional to it.)
+covers search/extract/crawl/map/filters/SDKs in depth; the
+analyze/research/finance/events endpoints below use the same auth and are
+additional to it.)
 
 Overview
 ========
@@ -36,6 +37,7 @@ Seekly provides:
 - intent and entity analysis
 - conversational research expansion
 - document extraction from URLs (single or batched)
+- bounded same-domain crawling and site mapping
 - finance and SEC filing discovery
 - event detection from search queries
 - upstream health checks and service monitoring
@@ -89,9 +91,9 @@ Two separate credential types are in play:
   dashboard frontend uses.
 - **API keys** (``X-API-Key: sk_live_...``, or ``Authorization: Bearer
   sk_live_...``) authenticate every other endpoint below (search, extract,
-  analyze, research, finance, events). Generate one from the dashboard or
-  via ``POST /v1/keys``. The raw key is only ever shown once, at creation
-  time; only its hash is stored server-side.
+  crawl/map, analyze, research, finance, events). Generate one from the
+  dashboard or via ``POST /v1/keys``. The raw key is only ever shown once,
+  at creation time; only its hash is stored server-side.
 
 Every API key carries a per-minute rate limit (``rate_limit_per_minute``,
 default ``DEFAULT_RATE_LIMIT_PER_MINUTE``, cap ``MAX_RATE_LIMIT_PER_MINUTE``).
@@ -119,6 +121,8 @@ The service currently exposes these endpoints:
 - ``GET /v1/health`` (public, no auth)
 - ``GET /v1/search`` (requires an API key)
 - ``GET /v1/extract`` / ``POST /v1/extract/batch`` (requires an API key)
+- ``POST /v1/crawl`` / ``GET /v1/crawl/{id}`` (requires an API key)
+- ``POST /v1/map`` / ``GET /v1/map/{id}`` (requires an API key)
 - ``GET /v1/analyze`` (requires an API key)
 - ``GET /v1/research`` (requires an API key)
 - ``GET /v1/finance/search`` (requires an API key)
@@ -288,6 +292,53 @@ Results come back in the same order as the request's ``urls``. One URL
 failing (unreachable, no content, etc.) never fails the batch — it just
 gets a non-null ``error`` on that entry.
 
+Crawl and map
+=============
+
+``POST /v1/crawl`` / ``POST /v1/map`` (requires an API key)
+
+.. code-block:: json
+
+   {
+     "url": "https://example.com",
+     "max_pages": 20,
+     "max_depth": 2
+   }
+
+Both start a bounded, same-domain crawl from ``url`` and return a job
+immediately in ``queued`` status rather than blocking on the crawl itself.
+``/v1/crawl`` also extracts each page's main content as Markdown;
+``/v1/map`` skips extraction and only reports which URLs were discovered.
+``max_pages`` (default ``20``, range ``1..200``) and ``max_depth`` (default
+``2``, range ``0..5``) bound the job; ``url`` goes through the same
+SSRF/private-network check as ``/v1/extract``.
+
+Poll ``GET /v1/crawl/{id}`` or ``GET /v1/map/{id}`` for status/results:
+
+.. code-block:: json
+
+   {
+     "id": "...",
+     "mode": "crawl",
+     "start_url": "https://example.com",
+     "max_pages": 20,
+     "max_depth": 2,
+     "status": "done",
+     "error": null,
+     "results": [
+       {"url": "https://example.com", "title": "Example", "content": "# Example\n..."}
+     ],
+     "created_at": "2025-01-02T12:00:00Z",
+     "finished_at": "2025-01-02T12:00:04Z"
+   }
+
+``status`` is one of ``queued`` / ``running`` / ``done`` / ``failed``.
+Hitting the time or page cap still finishes as ``done`` with whatever
+pages were fetched — that's an expected bound, not a failure. Jobs run as
+an in-process, timeout-bounded background task (no separate worker process
+to deploy or monitor), using `Scrapling <https://github.com/D4Vinci/Scrapling>`_
+for fetching, link discovery, and robots.txt compliance.
+
 Additional endpoints
 ====================
 
@@ -389,10 +440,11 @@ request/response/error handling themselves:
 - ``sdk/js/`` — Node 18+ or a browser, zero dependencies, see ``sdk/js/README.md``
 
 Both cover ``search`` (including the filter params above), ``extract``,
-``extract_batch``/``extractBatch``, and typed errors for ``401``/``429``/
-other non-2xx responses. They don't wrap analyze/research/finance/events
-yet — use raw HTTP + this README for those. Raw HTTP + ``API_GUIDE.md``
-remains the source of truth for anything an SDK doesn't wrap.
+``extract_batch``/``extractBatch``, ``crawl``/``map`` and their job-polling
+getters, and typed errors for ``401``/``429``/other non-2xx responses. They
+don't wrap analyze/research/finance/events yet — use raw HTTP + this
+README for those. Raw HTTP + ``API_GUIDE.md`` remains the source of truth
+for anything an SDK doesn't wrap.
 
 Configuration
 =============
@@ -417,6 +469,15 @@ Configuration
 - ``CACHE_TTL_SECONDS``: search response cache TTL (default ``300``)
 - ``MAX_BATCH_EXTRACT_URLS``: cap on URLs per ``POST /v1/extract/batch`` call
   (default ``20``)
+- ``DEFAULT_CRAWL_MAX_PAGES`` / ``MAX_CRAWL_MAX_PAGES``: default and cap for
+  ``max_pages`` on ``/v1/crawl`` and ``/v1/map`` (default ``20`` / ``200``)
+- ``DEFAULT_CRAWL_MAX_DEPTH`` / ``MAX_CRAWL_MAX_DEPTH``: default and cap for
+  ``max_depth`` (default ``2`` / ``5``)
+- ``CRAWL_JOB_TIMEOUT_SECONDS``: wall-clock cap per crawl/map job (default
+  ``120``) — a job that hits this still finishes ``done`` with whatever
+  pages it got
+- ``CRAWL_CONCURRENCY``: concurrent in-flight requests per crawl/map job
+  (default ``5``)
 - ``DEEPSEEK_API_KEY`` / ``DEEPSEEK_BASE_URL`` / ``DEEPSEEK_MODEL`` /
   ``DEEPSEEK_TIMEOUT_SECONDS``: DeepSeek settings for ``include_answer``
 

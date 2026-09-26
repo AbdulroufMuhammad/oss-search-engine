@@ -43,8 +43,8 @@ can revoke or resize one app's access without touching another's.
 
 ## 2. Authenticate your requests
 
-Every call to `/v1/search`, `/v1/extract`, or `/v1/extract/batch` needs your
-key in **one** of:
+Every call to `/v1/search`, `/v1/extract`, `/v1/extract/batch`, `/v1/crawl`,
+or `/v1/map` needs your key in **one** of:
 
 ```
 X-API-Key: sk_live_...
@@ -198,7 +198,77 @@ thumbnail_url}` — `url` is the page the image was found on, `image_url` is
 the direct image link. This runs one extra upstream query; if it fails,
 `images` just comes back empty rather than failing the search.
 
-## 7. Rate limits
+## 7. Crawl and map
+
+```
+POST /v1/crawl
+POST /v1/map
+```
+
+Both start a bounded, same-domain crawl from a URL and return a job you
+poll — they never block on the crawl itself.
+
+| Field       | Type   | Default | Notes                                           |
+|-------------|--------|---------|--------------------------------------------------|
+| `url`       | string | —       | required; must be a public URL (private/loopback IPs and cloud metadata endpoints are rejected with `400`) |
+| `max_pages` | int    | 20      | 1–200                                             |
+| `max_depth` | int    | 2       | 0–5; 0 = only `url` itself                       |
+
+`/v1/crawl` also extracts each page's main content as Markdown;
+`/v1/map` skips extraction (faster, cheaper) and only reports which URLs
+were found — use it when you just need the site's structure.
+
+```bash
+curl -X POST "https://<api-host>/v1/crawl" \
+  -H "X-API-Key: sk_live_..." \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://example.com", "max_pages": 20, "max_depth": 2}'
+# -> {"id": "...", "mode": "crawl", "status": "queued", "results": null, ...}
+```
+
+Poll for completion:
+
+```
+GET /v1/crawl/{job_id}
+GET /v1/map/{job_id}
+```
+
+```bash
+curl "https://<api-host>/v1/crawl/<job_id>" -H "X-API-Key: sk_live_..."
+```
+
+```json
+{
+  "id": "...",
+  "mode": "crawl",
+  "start_url": "https://example.com",
+  "max_pages": 20,
+  "max_depth": 2,
+  "status": "done",
+  "error": null,
+  "results": [
+    {"url": "https://example.com", "title": "Example", "content": "# Example\n..."},
+    {"url": "https://example.com/about", "title": "About", "content": "..."}
+  ],
+  "created_at": "2025-01-02T12:00:00Z",
+  "finished_at": "2025-01-02T12:00:04Z"
+}
+```
+
+`status` is one of `queued` / `running` / `done` / `failed`. `results` stays
+`null` until the job finishes; on `/v1/map`, each item has `url` only (no
+`title`/`content`). A job that hits its time or page cap still finishes as
+`done` with whatever pages it got — that's an expected bound, not an error.
+`status` only becomes `failed` when nothing could be crawled at all (e.g.
+the start URL itself is unreachable), with `error` explaining why.
+
+Jobs run server-side with a fixed timeout and never spawn a separate
+worker — nothing to poll externally, no queue infrastructure on your end.
+Only same-domain links are followed (subdomains of the start URL's domain
+count as the same site); off-site links, and anything past `max_depth`,
+are never fetched.
+
+## 8. Rate limits
 
 Each key has its own `requests/minute` limit (see it / change it from the
 dashboard, or `GET /v1/keys`). Go over it and you get:
@@ -217,14 +287,14 @@ high-traffic service), set a higher `rate_limit_per_minute` on that key's
 own row rather than working around 429s — see the dashboard's "Edit limit"
 or `PATCH /v1/keys/{id}`.
 
-## 8. Errors
+## 9. Errors
 
 | Status | Meaning                                              | What to do                                  |
 |--------|-------------------------------------------------------|-----------------------------------------------|
-| 400    | bad request (empty `q`, invalid `topic`/`time_range`) | fix the request                               |
+| 400    | bad request (empty `q`, invalid `topic`/`time_range`, or a crawl/map `url` that's unsafe/unreachable-by-policy) | fix the request |
 | 401    | missing/invalid/revoked API key, or bad JWT            | check your key; re-login for JWT endpoints    |
-| 404    | key not found (on `/v1/keys/{id}` — wrong id or not yours) | check the id                               |
-| 422    | validation error (bad param shape/type, batch urls empty or over the cap), or extract found no content | fix input |
+| 404    | key not found (on `/v1/keys/{id}`), or crawl/map job not found / not yours | check the id                   |
+| 422    | validation error (bad param shape/type, batch urls empty or over the cap, `max_pages`/`max_depth` out of range), or extract found no content | fix input |
 | 429    | rate limited                                           | back off `Retry-After` seconds, retry         |
 | 502    | upstream search engine unavailable                         | transient — retry with backoff                |
 
@@ -232,7 +302,7 @@ Error bodies are `{"detail": "..."}`. Batch extract is the one exception:
 its per-URL failures (unreachable page, no content, etc.) show up as
 `error` on that item, not as an HTTP error status.
 
-## 9. Code samples
+## 10. Code samples
 
 **Using the SDKs (recommended for Python/JS):**
 
@@ -292,7 +362,7 @@ if (!resp.ok) {
 const data = await resp.json();
 ```
 
-## 10. Good practices
+## 11. Good practices
 
 - One key per app/environment, not one shared key for everything — makes
   revocation and quota changes safe and scoped.
