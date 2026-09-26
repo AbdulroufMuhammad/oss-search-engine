@@ -1,8 +1,10 @@
 import asyncio
+import logging
 import time
 
 import httpx
 
+from api.config import UPSTREAM_COOLDOWN_SECONDS, UPSTREAM_FAILURE_THRESHOLD
 from api.models.search import ImageResult, SearchResponse, SearchResult
 from api.providers.base import ProviderUnavailableError
 from shared.canonical_url import canonicalize_url
@@ -19,6 +21,8 @@ from shared.source_registry import authority_for_domain
 CONTENT_TRUNCATE = 500
 DUPLICATE_CONTENT_PENALTY = 0.5
 MAX_IMAGE_RESULTS = 10
+
+logger = logging.getLogger(__name__)
 
 
 def _rank_and_sort(query: str, results: list[SearchResult], max_results: int) -> list[SearchResult]:
@@ -129,11 +133,57 @@ def _reshape(
 
 
 class UpstreamSearchProvider:
-    """Talks to the configured upstream search engine's JSON search API."""
+    """Talks to the configured upstream search engine's JSON search API.
 
-    def __init__(self, base_url: str, client: httpx.AsyncClient):
-        self._base_url = base_url
+    Accepts one or more base URLs. On a connect/timeout/5xx failure against
+    one, it tries the next before giving up - each failing URL is tracked
+    with a simple in-process circuit breaker (see api/config.py) so a
+    consistently-down instance is deprioritized instead of adding its own
+    timeout to every single request.
+    """
+
+    def __init__(self, base_urls: str | list[str], client: httpx.AsyncClient):
+        self._base_urls = [base_urls] if isinstance(base_urls, str) else list(base_urls)
         self._client = client
+        self._failure_counts: dict[str, int] = {}
+        self._cooldown_until: dict[str, float] = {}
+
+    def _ordered_urls(self) -> list[str]:
+        """Healthy URLs first, in configured order; URLs still in cooldown
+        are tried last (never dropped entirely - a stale "unhealthy" mark
+        shouldn't cause a 502 if every other instance is also down)."""
+        now = time.monotonic()
+        healthy = [u for u in self._base_urls if self._cooldown_until.get(u, 0.0) <= now]
+        cooling = [u for u in self._base_urls if self._cooldown_until.get(u, 0.0) > now]
+        return healthy + cooling
+
+    def _record_success(self, url: str) -> None:
+        self._failure_counts[url] = 0
+        self._cooldown_until.pop(url, None)
+
+    def _record_failure(self, url: str) -> None:
+        count = self._failure_counts.get(url, 0) + 1
+        self._failure_counts[url] = count
+        if count >= UPSTREAM_FAILURE_THRESHOLD:
+            self._cooldown_until[url] = time.monotonic() + UPSTREAM_COOLDOWN_SECONDS
+            logger.warning(
+                "upstream %s failed %d times in a row - deprioritizing for %.0fs",
+                url, count, UPSTREAM_COOLDOWN_SECONDS,
+            )
+
+    async def _get_with_failover(self, path: str, params: dict) -> httpx.Response:
+        last_exc: Exception | None = None
+        for url in self._ordered_urls():
+            try:
+                resp = await self._client.get(f"{url}{path}", params=params, timeout=20.0)
+                resp.raise_for_status()
+            except (httpx.ConnectError, httpx.TimeoutException, httpx.HTTPStatusError) as exc:
+                self._record_failure(url)
+                last_exc = exc
+                continue
+            self._record_success(url)
+            return resp
+        raise ProviderUnavailableError(f"upstream search engine unavailable: {last_exc}") from last_exc
 
     async def search(
         self,
@@ -151,15 +201,7 @@ class UpstreamSearchProvider:
             params["categories"] = categories
         if time_range:
             params["time_range"] = time_range
-        try:
-            resp = await self._client.get(
-                f"{self._base_url}/search",
-                params=params,
-                timeout=20.0,
-            )
-            resp.raise_for_status()
-        except (httpx.ConnectError, httpx.TimeoutException, httpx.HTTPStatusError) as exc:
-            raise ProviderUnavailableError(f"upstream search engine unavailable: {exc}") from exc
+        resp = await self._get_with_failover("/search", params)
 
         out = _reshape(resp.json(), max_results, include_domains=include_domains, exclude_domains=exclude_domains)
         out.response_time = round(time.monotonic() - start, 3)
@@ -167,15 +209,7 @@ class UpstreamSearchProvider:
 
     async def search_images(self, query: str, *, max_results: int = MAX_IMAGE_RESULTS) -> list[ImageResult]:
         params = {"q": query, "format": "json", "categories": "images"}
-        try:
-            resp = await self._client.get(
-                f"{self._base_url}/search",
-                params=params,
-                timeout=20.0,
-            )
-            resp.raise_for_status()
-        except (httpx.ConnectError, httpx.TimeoutException, httpx.HTTPStatusError) as exc:
-            raise ProviderUnavailableError(f"upstream search engine unavailable: {exc}") from exc
+        resp = await self._get_with_failover("/search", params)
 
         seen: set[str] = set()
         images: list[ImageResult] = []

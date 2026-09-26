@@ -1,6 +1,27 @@
 import os
 
 UPSTREAM_SEARCH_URL = os.environ.get("UPSTREAM_SEARCH_URL", "http://127.0.0.1:8081")
+
+# Extra upstream instances to fail over to if the primary is erroring or
+# timing out - comma-separated, e.g. "http://upstream-2:8081,http://upstream-3:8081".
+# Empty by default (single instance, no failover) so local dev needs no
+# extra setup; add instances here once you're running more than one for
+# real resilience, not just capacity.
+UPSTREAM_SEARCH_FALLBACK_URLS = [
+    u.strip() for u in os.environ.get("UPSTREAM_SEARCH_FALLBACK_URLS", "").split(",") if u.strip()
+]
+UPSTREAM_SEARCH_URLS = [UPSTREAM_SEARCH_URL, *UPSTREAM_SEARCH_FALLBACK_URLS]
+
+# Simple in-process circuit breaker per upstream URL: after this many
+# consecutive failures, that URL is deprioritized (tried last) for
+# UPSTREAM_COOLDOWN_SECONDS, rather than retried on every single request.
+# Deliberately per-instance state, not Valkey-backed - a stale "unhealthy"
+# mark on one API instance self-heals within one cooldown window, and this
+# is a resilience nice-to-have, not a correctness requirement like rate
+# limiting, so the added complexity of a shared store isn't worth it.
+UPSTREAM_FAILURE_THRESHOLD = int(os.environ.get("UPSTREAM_FAILURE_THRESHOLD", "3"))
+UPSTREAM_COOLDOWN_SECONDS = float(os.environ.get("UPSTREAM_COOLDOWN_SECONDS", "30"))
+
 CACHE_TTL_SECONDS = int(os.environ.get("CACHE_TTL_SECONDS", "300"))
 
 # Persistence (users + API keys). Defaults to a local SQLite file so the API
@@ -54,8 +75,23 @@ CRAWL_JOB_TIMEOUT_SECONDS = float(os.environ.get("CRAWL_JOB_TIMEOUT_SECONDS", "1
 CRAWL_CONCURRENCY = int(os.environ.get("CRAWL_CONCURRENCY", "5"))
 CRAWL_FETCH_TIMEOUT_SECONDS = float(os.environ.get("CRAWL_FETCH_TIMEOUT_SECONDS", "10"))
 
-# DeepSeek is used for LLM-synthesized search answers (`include_answer=true`).
+# DeepSeek is used for LLM-synthesized search answers (`include_answer=true`)
+# and for semantic re-ranking (`semantic_rerank=true`, see api/llm/rerank.py).
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
 DEEPSEEK_BASE_URL = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
 DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
 DEEPSEEK_TIMEOUT_SECONDS = float(os.environ.get("DEEPSEEK_TIMEOUT_SECONDS", "15"))
+SEMANTIC_RERANK_TOP_K = int(os.environ.get("SEMANTIC_RERANK_TOP_K", "10"))
+
+# Tavily is used as a fallback for /v1/search when Seekly's own upstream
+# comes back empty or with a weak top result (see api/providers/tavily.py).
+# Unset (default) means fallback never triggers - this is opt-in, since it's
+# a per-call cost against a third party, not something every deployment
+# wants on by default.
+TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY", "")
+TAVILY_BASE_URL = os.environ.get("TAVILY_BASE_URL", "https://api.tavily.com")
+TAVILY_TIMEOUT_SECONDS = float(os.environ.get("TAVILY_TIMEOUT_SECONDS", "15"))
+# Below this final_score on the top result (or on an empty result list),
+# fall back to Tavily for that query rather than return a weak/empty
+# response - see api/routes/search.py.
+TAVILY_FALLBACK_SCORE_THRESHOLD = float(os.environ.get("TAVILY_FALLBACK_SCORE_THRESHOLD", "0.35"))
