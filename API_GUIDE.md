@@ -81,6 +81,10 @@ GET /v1/search
 | `include_images`    | bool    | false     | also returns up to 10 image results in `images` (see §6)                        |
 | `include_raw_content` | bool  | false     | attach each result's full extracted page text as `raw_content` - skips a separate `GET /v1/extract` call per result. Fails soft per-URL (`raw_content: null`), never fails the search. |
 | `semantic_rerank`   | bool    | false     | have a DeepSeek call re-judge the top results for relevance before returning them (see §8). Fails soft to the original deterministic order. |
+| `search_depth`      | string  | `basic`   | `basic` or `advanced`. `advanced` fetches each result's full page (absorbing `include_raw_content`'s job) and re-scores ranking from the full text instead of the snippet - more accurate but slower and pricier. |
+| `chunks_per_source` | int     | —         | only meaningful with `search_depth=advanced`; attaches up to N (max 10) query-relevant passages per result as `content_chunks`. |
+| `include_image_descriptions` | bool | false | mirrors each image's own title into `description` on that image (no vision model call - nothing here does actual image understanding). |
+| `country`           | string  | —         | forwarded best-effort to the upstream as a `country` param; whether it changes anything depends on the upstream's own backend support. An unsupported value is a safe no-op, not an error. |
 
 ```bash
 curl "https://<api-host>/v1/search?q=rust%20async%20runtimes&max_results=5" \
@@ -104,7 +108,8 @@ curl "https://<api-host>/v1/search?q=rust%20async%20runtimes&max_results=5" \
       "content_quality_score": 0.91,
       "duplicate_penalty": 0.0,
       "final_score": 0.89,
-      "raw_content": null
+      "raw_content": null,
+      "content_chunks": null
     }
   ],
   "images": [],
@@ -198,9 +203,11 @@ curl "https://<api-host>/v1/search?q=golden%20retriever&include_images=true" \
 ```
 
 Adds up to 10 entries to the `images` array, each `{title, url, image_url,
-thumbnail_url}` — `url` is the page the image was found on, `image_url` is
-the direct image link. This runs one extra upstream query; if it fails,
-`images` just comes back empty rather than failing the search.
+thumbnail_url, description}` — `url` is the page the image was found on,
+`image_url` is the direct image link. This runs one extra upstream query;
+if it fails, `images` just comes back empty rather than failing the search.
+`description` is only populated when `include_image_descriptions=true`
+was also passed - see §3.
 
 ## 7. Crawl and map
 
@@ -221,6 +228,7 @@ poll — they never block on the crawl itself.
 | `exclude_paths` | string[] | — | regex denylist, checked after `select_paths`; a matching link is never followed. Up to 20. |
 | `select_domains` | string[] | — | extra domains (beyond `url`'s own) that links may follow into. Ignored when `allow_external` is set. Up to 20. |
 | `allow_external` | bool | false | follow links off the starting domain entirely, ignoring `select_domains`. Every such link still goes through the same SSRF guard as `url` itself, so it can't be used to reach a private/internal address. |
+| `instructions` | string | — | natural-language guidance for which links to follow (e.g. "only follow links about pricing"), up to 500 chars. Costs one DeepSeek call per fetched page (up to `max_pages` for the whole job) - the one crawl option with a real per-job LLM cost. **Off by default**: rejected with `400` unless the deployment has set `CRAWL_INSTRUCTIONS_ENABLED=true`, regardless of what you send here. |
 
 `/v1/crawl` also extracts each page's main content as Markdown;
 `/v1/map` skips extraction (faster, cheaper) and only reports which URLs
@@ -256,6 +264,7 @@ curl "https://<api-host>/v1/crawl/<job_id>" -H "X-API-Key: sk_live_..."
   "exclude_paths": null,
   "select_domains": null,
   "allow_external": false,
+  "instructions": null,
   "status": "done",
   "error": null,
   "results": [
@@ -347,7 +356,7 @@ or `PATCH /v1/keys/{id}`.
 
 | Status | Meaning                                              | What to do                                  |
 |--------|-------------------------------------------------------|-----------------------------------------------|
-| 400    | bad request (empty `q`, invalid `topic`/`time_range`, or a crawl/map `url` that's unsafe/unreachable-by-policy) | fix the request |
+| 400    | bad request (empty `q`, invalid `topic`/`time_range`/`search_depth`, a crawl/map `url` that's unsafe/unreachable-by-policy, or `instructions` sent while disabled on this deployment) | fix the request |
 | 401    | missing/invalid/revoked API key, or bad JWT            | check your key; re-login for JWT endpoints    |
 | 404    | key not found (on `/v1/keys/{id}`), or crawl/map job not found / not yours | check the id                   |
 | 422    | validation error (bad param shape/type, batch urls empty or over the cap, `max_pages`/`max_depth` out of range, invalid `select_paths`/`exclude_paths` regex, or too many patterns/domains), or extract found no content | fix input |
@@ -423,9 +432,13 @@ const data = await resp.json();
 - One key per app/environment, not one shared key for everything — makes
   revocation and quota changes safe and scoped.
 - Read the key from config/secrets, never commit it.
-- Use `include_answer=true`, `include_images=true`, and `semantic_rerank=true`
-  only where you actually use the result — each costs an extra call
-  (DeepSeek, a second upstream query, or another DeepSeek call, respectively).
+- Use `include_answer=true`, `include_images=true`, `semantic_rerank=true`,
+  and `search_depth=advanced` only where you actually use the result — each
+  costs an extra call (DeepSeek, a second upstream query, another DeepSeek
+  call, or a per-result fetch, respectively).
+- Crawl/map `instructions` is disabled by default server-side — don't rely
+  on it being active just because your request includes it; check the
+  operator has set `CRAWL_INSTRUCTIONS_ENABLED` first.
 - For customer-facing use, check `fallback_used` if you want to know when a
   response came from the Tavily safety net rather than Seekly's own
   ranking — useful for monitoring how often that's happening, not required

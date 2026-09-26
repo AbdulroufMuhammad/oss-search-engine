@@ -171,6 +171,19 @@ Request parameters:
   relevance and returns them in that order instead of Seekly's default
   deterministic ranking. Fails soft to the original order on any error.
   See *Reliability* below for why this exists.
+- ``search_depth``: ``basic`` (default) or ``advanced``. ``advanced``
+  fetches each result's full page (absorbing ``include_raw_content``'s
+  job) and re-scores ranking from the full text instead of the snippet -
+  more accurate but slower and pricier than ``basic``.
+- ``chunks_per_source``: integer, only meaningful with
+  ``search_depth=advanced``; attaches up to N (max 10) query-relevant
+  passages per result as ``content_chunks``.
+- ``include_image_descriptions``: boolean, default ``false`` — mirrors
+  each image's own title into ``description`` on that image (no vision
+  model call - nothing here does actual image understanding).
+- ``country``: forwarded best-effort to the upstream as a ``country``
+  param; whether it changes anything depends on the upstream's own
+  backend support. An unsupported value is a safe no-op, not an error.
 
 The ``expand`` flag performs a multi-query fan-out using the original query plus
 ``<query> news`` and ``<query> latest`` and then merges and re-ranks the results.
@@ -195,7 +208,8 @@ Response model:
          "content_quality_score": 0.91,
          "duplicate_penalty": 0.0,
          "final_score": 0.89,
-         "raw_content": null
+         "raw_content": null,
+         "content_chunks": null
        }
      ],
      "images": [
@@ -203,7 +217,8 @@ Response model:
          "title": "Example image title",
          "url": "https://example.com/page-the-image-is-on",
          "image_url": "https://example.com/image.jpg",
-         "thumbnail_url": "https://example.com/image-thumb.jpg"
+         "thumbnail_url": "https://example.com/image-thumb.jpg",
+         "description": null
        }
      ],
      "response_time": 0.233,
@@ -211,7 +226,8 @@ Response model:
    }
 
 ``images`` is only populated when ``include_images=true`` was passed;
-otherwise it's an empty list.
+otherwise it's an empty list. ``description`` on each image is only
+populated when ``include_image_descriptions=true`` was also passed.
 
 The full normalized result shape is:
 
@@ -340,6 +356,13 @@ Optional filters, both taking up to 20 entries:
   still goes through the same SSRF guard as ``url`` itself, so this can't
   be used to reach a private/internal address even though it opens up
   which public domains get crawled.
+- ``instructions`` (string, up to 500 chars): natural-language guidance
+  for which links to follow (e.g. "only follow links about pricing").
+  Costs one DeepSeek call per fetched page (up to ``max_pages`` for the
+  whole job) - the one crawl option with a real per-job LLM cost.
+  **Disabled by default**: rejected with ``400`` unless the deployment
+  has set ``CRAWL_INSTRUCTIONS_ENABLED=true``, regardless of what a
+  caller sends here.
 
 Poll ``GET /v1/crawl/{id}`` or ``GET /v1/map/{id}`` for status/results:
 
@@ -355,6 +378,7 @@ Poll ``GET /v1/crawl/{id}`` or ``GET /v1/map/{id}`` for status/results:
      "exclude_paths": null,
      "select_domains": null,
      "allow_external": false,
+     "instructions": null,
      "status": "done",
      "error": null,
      "results": [
@@ -550,6 +574,11 @@ Configuration
   pages it got
 - ``CRAWL_CONCURRENCY``: concurrent in-flight requests per crawl/map job
   (default ``5``)
+- ``CRAWL_INSTRUCTIONS_ENABLED``: set to ``true`` to allow crawl/map's
+  ``instructions`` option - **off by default**, since it's the one crawl
+  option with a real per-job LLM cost (up to ``max_pages`` DeepSeek calls).
+  A request that sets ``instructions`` while this is unset is rejected
+  with ``400``, regardless of what the caller sends.
 - ``DEEPSEEK_API_KEY`` / ``DEEPSEEK_BASE_URL`` / ``DEEPSEEK_MODEL`` /
   ``DEEPSEEK_TIMEOUT_SECONDS``: DeepSeek settings for ``include_answer``
   and ``semantic_rerank``
