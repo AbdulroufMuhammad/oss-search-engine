@@ -128,3 +128,58 @@ def test_health_does_not_require_special_handling():
     client, _ = make_client(FakeResponse(200, {"upstream": "ok"}))
     resp = client.health()
     assert resp.upstream == "ok"
+
+
+def _job_response(mode="crawl", status="queued"):
+    return {
+        "id": "job-1",
+        "mode": mode,
+        "start_url": "https://example.com",
+        "max_pages": 20,
+        "max_depth": 2,
+        "status": status,
+        "error": None,
+        "results": None,
+        "created_at": "2026-01-01T00:00:00Z",
+        "finished_at": None,
+    }
+
+
+def test_crawl_posts_url_and_returns_queued_job():
+    client, session = make_client(FakeResponse(201, _job_response()))
+    job = client.crawl("https://example.com", max_pages=5, max_depth=1)
+    assert session.last_request["url"] == "https://api.example.com/v1/crawl"
+    assert session.last_request["json"] == {
+        "url": "https://example.com",
+        "max_pages": 5,
+        "max_depth": 1,
+    }
+    assert job.status == "queued"
+    assert job.mode == "crawl"
+
+
+def test_crawl_omits_unset_options_from_body():
+    client, session = make_client(FakeResponse(201, _job_response()))
+    client.crawl("https://example.com")
+    assert session.last_request["json"] == {"url": "https://example.com"}
+
+
+def test_get_crawl_job_hits_the_right_path():
+    client, session = make_client(FakeResponse(200, _job_response(status="done")))
+    job = client.get_crawl_job("job-1")
+    assert session.last_request["url"] == "https://api.example.com/v1/crawl/job-1"
+    assert job.status == "done"
+
+
+def test_map_posts_url_and_returns_queued_job():
+    client, session = make_client(FakeResponse(201, _job_response(mode="map")))
+    job = client.map("https://example.com")
+    assert session.last_request["url"] == "https://api.example.com/v1/map"
+    assert job.mode == "map"
+
+
+def test_get_map_job_hits_the_right_path():
+    client, session = make_client(FakeResponse(200, _job_response(mode="map", status="done")))
+    job = client.get_map_job("job-1")
+    assert session.last_request["url"] == "https://api.example.com/v1/map/job-1"
+    assert job.status == "done"

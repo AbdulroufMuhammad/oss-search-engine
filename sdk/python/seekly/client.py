@@ -173,3 +173,34 @@ class SeeklyClient:
     def health(self):
         """GET /v1/health. No API key required, but harmless to send one."""
         return self._request("GET", "/v1/health")
+
+    def crawl(self, url: str, *, max_pages: int | None = None, max_depth: int | None = None):
+        """POST /v1/crawl. Starts a bounded crawl from `url`, following
+        same-domain links and extracting each page's main content as
+        Markdown. Returns the job immediately in "queued" status - poll
+        `get_crawl_job(job.id)` for progress and results."""
+        return self._create_crawl_job("/v1/crawl", url, max_pages, max_depth)
+
+    def get_crawl_job(self, job_id: str):
+        """GET /v1/crawl/{job_id}."""
+        return self._request("GET", f"/v1/crawl/{job_id}")
+
+    def map(self, url: str, *, max_pages: int | None = None, max_depth: int | None = None):
+        """POST /v1/map. Same job model as `crawl`, but discovers URLs
+        without extracting page content - faster and cheaper. Poll
+        `get_map_job(job.id)` for progress and results."""
+        return self._create_crawl_job("/v1/map", url, max_pages, max_depth)
+
+    def get_map_job(self, job_id: str):
+        """GET /v1/map/{job_id}."""
+        return self._request("GET", f"/v1/map/{job_id}")
+
+    def _create_crawl_job(
+        self, path: str, url: str, max_pages: int | None, max_depth: int | None
+    ):
+        body: dict[str, Any] = {"url": url}
+        if max_pages is not None:
+            body["max_pages"] = max_pages
+        if max_depth is not None:
+            body["max_depth"] = max_depth
+        return self._request("POST", path, json=body)

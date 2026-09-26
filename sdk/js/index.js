@@ -184,4 +184,48 @@ export class SeeklyClient {
   health() {
     return this._request("GET", "/v1/health");
   }
+
+  /**
+   * POST /v1/crawl. Starts a bounded crawl from `url`, following
+   * same-domain links and extracting each page's main content as Markdown.
+   * Returns the job immediately in "queued" status - poll
+   * `getCrawlJob(job.id)` for progress and results.
+   * @param {string} url
+   * @param {object} [options]
+   * @param {number} [options.maxPages]
+   * @param {number} [options.maxDepth]
+   */
+  crawl(url, options = {}) {
+    return this._createCrawlJob("/v1/crawl", url, options);
+  }
+
+  /** GET /v1/crawl/{jobId} */
+  getCrawlJob(jobId) {
+    return this._request("GET", `/v1/crawl/${jobId}`);
+  }
+
+  /**
+   * POST /v1/map. Same job model as `crawl`, but discovers URLs without
+   * extracting page content - faster and cheaper. Poll `getMapJob(job.id)`
+   * for progress and results.
+   * @param {string} url
+   * @param {object} [options]
+   * @param {number} [options.maxPages]
+   * @param {number} [options.maxDepth]
+   */
+  map(url, options = {}) {
+    return this._createCrawlJob("/v1/map", url, options);
+  }
+
+  /** GET /v1/map/{jobId} */
+  getMapJob(jobId) {
+    return this._request("GET", `/v1/map/${jobId}`);
+  }
+
+  _createCrawlJob(path, url, { maxPages, maxDepth } = {}) {
+    const body = { url };
+    if (maxPages !== undefined) body.max_pages = maxPages;
+    if (maxDepth !== undefined) body.max_depth = maxDepth;
+    return this._request("POST", path, { body });
+  }
 }

@@ -48,6 +48,18 @@ for (const item of batch.results) {
     console.log(`${item.url}: ${item.document.word_count} words`);
   }
 }
+
+let job = await client.crawl("https://example.com", { maxPages: 20, maxDepth: 2 });
+while (job.status === "queued" || job.status === "running") {
+  await new Promise((r) => setTimeout(r, 2000));
+  job = await client.getCrawlJob(job.id);
+}
+for (const page of job.results || []) {
+  console.log(page.url, page.title);
+}
+
+// map is the same job model, without page content extraction
+const mapJob = await client.map("https://example.com", { maxDepth: 1 });
 ```
 
 Responses are plain parsed JSON, not wrapped model classes — new fields the

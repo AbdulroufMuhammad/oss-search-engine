@@ -115,3 +115,64 @@ test("health returns parsed JSON", async () => {
   const resp = await client.health();
   assert.equal(resp.upstream, "ok");
 });
+
+function jobResponse(mode = "crawl", status = "queued") {
+  return {
+    id: "job-1",
+    mode,
+    start_url: "https://example.com",
+    max_pages: 20,
+    max_depth: 2,
+    status,
+    error: null,
+    results: null,
+    created_at: "2026-01-01T00:00:00Z",
+    finished_at: null,
+  };
+}
+
+test("crawl posts url and returns queued job", async () => {
+  const { client, calls } = makeClient({ status: 201, json: jobResponse() });
+  const job = await client.crawl("https://example.com", { maxPages: 5, maxDepth: 1 });
+
+  const url = new URL(calls[0].url);
+  assert.equal(url.pathname, "/v1/crawl");
+  assert.equal(calls[0].init.method, "POST");
+  assert.deepEqual(JSON.parse(calls[0].init.body), {
+    url: "https://example.com",
+    max_pages: 5,
+    max_depth: 1,
+  });
+  assert.equal(job.status, "queued");
+  assert.equal(job.mode, "crawl");
+});
+
+test("crawl omits unset options from body", async () => {
+  const { client, calls } = makeClient({ status: 201, json: jobResponse() });
+  await client.crawl("https://example.com");
+  assert.deepEqual(JSON.parse(calls[0].init.body), { url: "https://example.com" });
+});
+
+test("getCrawlJob hits the right path", async () => {
+  const { client, calls } = makeClient({ json: jobResponse("crawl", "done") });
+  const job = await client.getCrawlJob("job-1");
+  const url = new URL(calls[0].url);
+  assert.equal(url.pathname, "/v1/crawl/job-1");
+  assert.equal(job.status, "done");
+});
+
+test("map posts url and returns queued job", async () => {
+  const { client, calls } = makeClient({ status: 201, json: jobResponse("map") });
+  const job = await client.map("https://example.com");
+  const url = new URL(calls[0].url);
+  assert.equal(url.pathname, "/v1/map");
+  assert.equal(job.mode, "map");
+});
+
+test("getMapJob hits the right path", async () => {
+  const { client, calls } = makeClient({ json: jobResponse("map", "done") });
+  const job = await client.getMapJob("job-1");
+  const url = new URL(calls[0].url);
+  assert.equal(url.pathname, "/v1/map/job-1");
+  assert.equal(job.status, "done");
+});

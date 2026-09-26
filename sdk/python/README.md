@@ -38,6 +38,16 @@ for item in batch.results:
         print(f"{item.url} failed: {item.error}")
     else:
         print(f"{item.url}: {item.document.word_count} words")
+
+job = client.crawl("https://example.com", max_pages=20, max_depth=2)
+while job.status in ("queued", "running"):
+    time.sleep(2)
+    job = client.get_crawl_job(job.id)
+for page in job.results or []:
+    print(page.url, page.title)
+
+# map is the same job model, without page content extraction
+map_job = client.map("https://example.com", max_depth=1)
 ```
 
 Responses are attribute-accessible objects built directly from the
