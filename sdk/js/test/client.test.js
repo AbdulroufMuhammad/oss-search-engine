@@ -176,3 +176,38 @@ test("getMapJob hits the right path", async () => {
   assert.equal(url.pathname, "/v1/map/job-1");
   assert.equal(job.status, "done");
 });
+
+test("search sends includeRawContent as include_raw_content", async () => {
+  const { client, calls } = makeClient({
+    json: { query: "q", answer: null, results: [], images: [], response_time: 0.1 },
+  });
+  await client.search("q", { includeRawContent: true });
+  const url = new URL(calls[0].url);
+  assert.equal(url.searchParams.get("include_raw_content"), "true");
+});
+
+test("crawl sends path and domain filters", async () => {
+  const { client, calls } = makeClient({ status: 201, json: jobResponse() });
+  await client.crawl("https://example.com", {
+    selectPaths: ["^/blog/"],
+    excludePaths: ["^/blog/drafts/"],
+    selectDomains: ["other.example.com"],
+    allowExternal: true,
+  });
+  assert.deepEqual(JSON.parse(calls[0].init.body), {
+    url: "https://example.com",
+    select_paths: ["^/blog/"],
+    exclude_paths: ["^/blog/drafts/"],
+    select_domains: ["other.example.com"],
+    allow_external: true,
+  });
+});
+
+test("map sends path and domain filters", async () => {
+  const { client, calls } = makeClient({ status: 201, json: jobResponse("map") });
+  await client.map("https://example.com", { selectDomains: ["other.example.com"] });
+  assert.deepEqual(JSON.parse(calls[0].init.body), {
+    url: "https://example.com",
+    select_domains: ["other.example.com"],
+  });
+});

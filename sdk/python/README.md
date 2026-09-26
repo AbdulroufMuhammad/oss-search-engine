@@ -29,6 +29,10 @@ print(resp.answer)
 for r in resp.results:
     print(r.final_score, r.title, r.url)
 
+# skip a separate extract() call - get each result's full page text inline
+resp = client.search("rust async runtimes", include_raw_content=True)
+print(resp.results[0].raw_content)
+
 doc = client.extract("https://example.com/article", query="pricing")
 print(doc.content)
 
@@ -48,6 +52,14 @@ for page in job.results or []:
 
 # map is the same job model, without page content extraction
 map_job = client.map("https://example.com", max_depth=1)
+
+# restrict crawling to /blog/ paths, plus a second domain, and skip drafts
+job = client.crawl(
+    "https://example.com",
+    select_paths=[r"^/blog/"],
+    exclude_paths=[r"^/blog/drafts/"],
+    select_domains=["blog.example.com"],
+)
 ```
 
 Responses are attribute-accessible objects built directly from the

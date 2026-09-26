@@ -119,6 +119,9 @@ export class SeeklyClient {
    * @param {"day"|"week"|"month"|"year"} [options.timeRange]
    * @param {"general"|"news"} [options.topic="general"]
    * @param {boolean} [options.includeImages=false]
+   * @param {boolean} [options.includeRawContent=false] - attach each
+   *   result's full extracted page text as `.raw_content` (fails soft to
+   *   `null` per-URL) instead of a separate `extract` call.
    */
   search(query, options = {}) {
     const {
@@ -131,6 +134,7 @@ export class SeeklyClient {
       timeRange,
       topic = "general",
       includeImages = false,
+      includeRawContent = false,
     } = options;
     return this._request("GET", "/v1/search", {
       params: {
@@ -144,6 +148,7 @@ export class SeeklyClient {
         time_range: timeRange,
         topic,
         include_images: includeImages,
+        include_raw_content: includeRawContent,
       },
     });
   }
@@ -194,6 +199,15 @@ export class SeeklyClient {
    * @param {object} [options]
    * @param {number} [options.maxPages]
    * @param {number} [options.maxDepth]
+   * @param {string[]} [options.selectPaths] - regex allowlist matched
+   *   against each discovered link's URL path
+   * @param {string[]} [options.excludePaths] - regex denylist, checked
+   *   after selectPaths
+   * @param {string[]} [options.selectDomains] - extra domains (beyond
+   *   `url`'s own) that links are allowed to follow into
+   * @param {boolean} [options.allowExternal] - follow links off the
+   *   starting domain entirely; every such link still goes through the
+   *   same SSRF guard as `extract`
    */
   crawl(url, options = {}) {
     return this._createCrawlJob("/v1/crawl", url, options);
@@ -205,13 +219,17 @@ export class SeeklyClient {
   }
 
   /**
-   * POST /v1/map. Same job model as `crawl`, but discovers URLs without
-   * extracting page content - faster and cheaper. Poll `getMapJob(job.id)`
-   * for progress and results.
+   * POST /v1/map. Same job model and filter options as `crawl`, but
+   * discovers URLs without extracting page content - faster and cheaper.
+   * Poll `getMapJob(job.id)` for progress and results.
    * @param {string} url
    * @param {object} [options]
    * @param {number} [options.maxPages]
    * @param {number} [options.maxDepth]
+   * @param {string[]} [options.selectPaths]
+   * @param {string[]} [options.excludePaths]
+   * @param {string[]} [options.selectDomains]
+   * @param {boolean} [options.allowExternal]
    */
   map(url, options = {}) {
     return this._createCrawlJob("/v1/map", url, options);
@@ -222,10 +240,18 @@ export class SeeklyClient {
     return this._request("GET", `/v1/map/${jobId}`);
   }
 
-  _createCrawlJob(path, url, { maxPages, maxDepth } = {}) {
+  _createCrawlJob(
+    path,
+    url,
+    { maxPages, maxDepth, selectPaths, excludePaths, selectDomains, allowExternal } = {}
+  ) {
     const body = { url };
     if (maxPages !== undefined) body.max_pages = maxPages;
     if (maxDepth !== undefined) body.max_depth = maxDepth;
+    if (selectPaths !== undefined) body.select_paths = selectPaths;
+    if (excludePaths !== undefined) body.exclude_paths = excludePaths;
+    if (selectDomains !== undefined) body.select_domains = selectDomains;
+    if (allowExternal !== undefined) body.allow_external = allowExternal;
     return this._request("POST", path, { body });
   }
 }

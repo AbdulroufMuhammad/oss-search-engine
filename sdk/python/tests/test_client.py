@@ -183,3 +183,38 @@ def test_get_map_job_hits_the_right_path():
     job = client.get_map_job("job-1")
     assert session.last_request["url"] == "https://api.example.com/v1/map/job-1"
     assert job.status == "done"
+
+
+def test_search_sends_include_raw_content():
+    client, session = make_client(
+        FakeResponse(200, {"query": "q", "answer": None, "results": [], "images": [], "response_time": 0.1})
+    )
+    client.search("q", include_raw_content=True)
+    assert session.last_request["params"]["include_raw_content"] is True
+
+
+def test_crawl_sends_path_and_domain_filters():
+    client, session = make_client(FakeResponse(201, _job_response()))
+    client.crawl(
+        "https://example.com",
+        select_paths=[r"^/blog/"],
+        exclude_paths=[r"^/blog/drafts/"],
+        select_domains=["other.example.com"],
+        allow_external=True,
+    )
+    assert session.last_request["json"] == {
+        "url": "https://example.com",
+        "select_paths": [r"^/blog/"],
+        "exclude_paths": [r"^/blog/drafts/"],
+        "select_domains": ["other.example.com"],
+        "allow_external": True,
+    }
+
+
+def test_map_sends_path_and_domain_filters():
+    client, session = make_client(FakeResponse(201, _job_response(mode="map")))
+    client.map("https://example.com", select_domains=["other.example.com"])
+    assert session.last_request["json"] == {
+        "url": "https://example.com",
+        "select_domains": ["other.example.com"],
+    }

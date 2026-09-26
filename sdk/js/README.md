@@ -37,6 +37,10 @@ for (const r of resp.results) {
   console.log(r.final_score, r.title, r.url);
 }
 
+// skip a separate extract() call - get each result's full page text inline
+const withRaw = await client.search("rust async runtimes", { includeRawContent: true });
+console.log(withRaw.results[0].raw_content);
+
 const doc = await client.extract("https://example.com/article", { query: "pricing" });
 console.log(doc.content);
 
@@ -60,6 +64,13 @@ for (const page of job.results || []) {
 
 // map is the same job model, without page content extraction
 const mapJob = await client.map("https://example.com", { maxDepth: 1 });
+
+// restrict crawling to /blog/ paths, plus a second domain, and skip drafts
+const filtered = await client.crawl("https://example.com", {
+  selectPaths: ["^/blog/"],
+  excludePaths: ["^/blog/drafts/"],
+  selectDomains: ["blog.example.com"],
+});
 ```
 
 Responses are plain parsed JSON, not wrapped model classes — new fields the
