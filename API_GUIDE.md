@@ -80,6 +80,7 @@ GET /v1/search
 | `topic`             | string  | `general` | `general` or `news` — `news` ensures the news category is included              |
 | `include_images`    | bool    | false     | also returns up to 10 image results in `images` (see §6)                        |
 | `include_raw_content` | bool  | false     | attach each result's full extracted page text as `raw_content` - skips a separate `GET /v1/extract` call per result. Fails soft per-URL (`raw_content: null`), never fails the search. |
+| `semantic_rerank`   | bool    | false     | have a DeepSeek call re-judge the top results for relevance before returning them (see §8). Fails soft to the original deterministic order. |
 
 ```bash
 curl "https://<api-host>/v1/search?q=rust%20async%20runtimes&max_results=5" \
@@ -107,7 +108,8 @@ curl "https://<api-host>/v1/search?q=rust%20async%20runtimes&max_results=5" \
     }
   ],
   "images": [],
-  "response_time": 0.233
+  "response_time": 0.233,
+  "fallback_used": false
 }
 ```
 
@@ -278,7 +280,51 @@ Only same-domain links are followed (subdomains of the start URL's domain
 count as the same site); off-site links, and anything past `max_depth`,
 are never fetched.
 
-## 8. Rate limits
+## 8. Reliability: semantic rerank, Tavily fallback, and upstream health
+
+Three things the server does to keep `/v1/search` answering well even when
+something underneath it is having a bad day:
+
+**Semantic rerank (`semantic_rerank=true`).** Seekly's default ranking is
+deterministic — relevance/authority/freshness/content-quality math, no
+embeddings (see §3). That's fast and reproducible, but weaker on fuzzy or
+ambiguous queries than a real semantic judgment. Setting
+`semantic_rerank=true` adds one DeepSeek call that re-judges the top
+results (`SEMANTIC_RERANK_TOP_K`, default 10) and returns them in that
+order instead. It fails soft — a DeepSeek outage or malformed response
+just leaves the original deterministic order in place, same convention as
+`include_answer`.
+
+**Tavily fallback (server-configured, not a request param).** If the
+operator has set `TAVILY_API_KEY`, a query whose own upstream comes back
+empty, or whose top result scores below `TAVILY_FALLBACK_SCORE_THRESHOLD`
+(default `0.35`), is retried against Tavily before the response is
+returned to you. The response's `fallback_used` field tells you whether
+this happened. Unset `TAVILY_API_KEY` means this never triggers — it's an
+opt-in safety net for deployments that want it, not default behavior.
+
+**Upstream failover.** If the operator has configured more than one
+upstream instance (`UPSTREAM_SEARCH_FALLBACK_URLS`), a connect/timeout/5xx
+failure against one is retried against the next automatically, inside the
+same request — you never see the failure as a caller. An instance that
+fails repeatedly is deprioritized (tried last) for a cooldown window
+rather than retried on every request. `GET /v1/health` reports each
+configured instance individually:
+
+```json
+{
+  "upstream": "ok",
+  "upstreams": [
+    {"url": "http://upstream-1:8081", "status": "ok"},
+    {"url": "http://upstream-2:8081", "status": "down"}
+  ]
+}
+```
+
+`upstream` is the overall status (`ok` if at least one instance can serve
+a request); `upstreams` is the per-instance detail an alert should page on.
+
+## 9. Rate limits
 
 Each key has its own `requests/minute` limit (see it / change it from the
 dashboard, or `GET /v1/keys`). Go over it and you get:
@@ -297,7 +343,7 @@ high-traffic service), set a higher `rate_limit_per_minute` on that key's
 own row rather than working around 429s — see the dashboard's "Edit limit"
 or `PATCH /v1/keys/{id}`.
 
-## 9. Errors
+## 10. Errors
 
 | Status | Meaning                                              | What to do                                  |
 |--------|-------------------------------------------------------|-----------------------------------------------|
@@ -306,13 +352,13 @@ or `PATCH /v1/keys/{id}`.
 | 404    | key not found (on `/v1/keys/{id}`), or crawl/map job not found / not yours | check the id                   |
 | 422    | validation error (bad param shape/type, batch urls empty or over the cap, `max_pages`/`max_depth` out of range, invalid `select_paths`/`exclude_paths` regex, or too many patterns/domains), or extract found no content | fix input |
 | 429    | rate limited                                           | back off `Retry-After` seconds, retry         |
-| 502    | upstream search engine unavailable                         | transient — retry with backoff                |
+| 502    | upstream search engine unavailable (every configured instance failed over, and Tavily fallback either isn't configured or also failed — see §8) | transient — retry with backoff |
 
 Error bodies are `{"detail": "..."}`. Batch extract is the one exception:
 its per-URL failures (unreachable page, no content, etc.) show up as
 `error` on that item, not as an HTTP error status.
 
-## 10. Code samples
+## 11. Code samples
 
 **Using the SDKs (recommended for Python/JS):**
 
@@ -372,14 +418,18 @@ if (!resp.ok) {
 const data = await resp.json();
 ```
 
-## 11. Good practices
+## 12. Good practices
 
 - One key per app/environment, not one shared key for everything — makes
   revocation and quota changes safe and scoped.
 - Read the key from config/secrets, never commit it.
-- Use `include_answer=true` and `include_images=true` only where you
-  actually use the result — they're the params that cost an extra upstream
-  call (DeepSeek, or a second upstream query, respectively).
+- Use `include_answer=true`, `include_images=true`, and `semantic_rerank=true`
+  only where you actually use the result — each costs an extra call
+  (DeepSeek, a second upstream query, or another DeepSeek call, respectively).
+- For customer-facing use, check `fallback_used` if you want to know when a
+  response came from the Tavily safety net rather than Seekly's own
+  ranking — useful for monitoring how often that's happening, not required
+  for correctness (the response shape is identical either way).
 - For batch extract, check each item's `error`, not just the HTTP status —
   a 200 can still contain per-URL failures.
 - Treat `429` as expected, not exceptional — handle it, don't alert-page on it.
