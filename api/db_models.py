@@ -57,6 +57,12 @@ class CrawlJob(Base):
     start_url: Mapped[str] = mapped_column(String(2048), nullable=False)
     max_pages: Mapped[int] = mapped_column(Integer, nullable=False)
     max_depth: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Regex patterns (matched against each discovered URL's path) and extra
+    # allowed domains - see api/crawl.py's _BoundedCrawlSpider.
+    select_paths: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    exclude_paths: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    select_domains: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    allow_external: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     status: Mapped[str] = mapped_column(String(10), nullable=False, default="queued")
     # "queued" | "running" | "done" | "failed"
     results: Mapped[list | None] = mapped_column(JSON, nullable=True)

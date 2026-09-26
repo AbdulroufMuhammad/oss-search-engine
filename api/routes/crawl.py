@@ -34,6 +34,10 @@ async def _create_job(
         start_url=body.url,
         max_pages=body.max_pages,
         max_depth=body.max_depth,
+        select_paths=body.select_paths,
+        exclude_paths=body.exclude_paths,
+        select_domains=body.select_domains,
+        allow_external=body.allow_external,
     )
     session.add(job)
     await session.commit()

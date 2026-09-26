@@ -108,6 +108,78 @@ async def test_get_crawl_job_ownership_isolation(client, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_create_crawl_rejects_invalid_select_paths_regex(client):
+    api_key = await _signup_and_get_key(client)
+    resp = await client.post(
+        "/v1/crawl",
+        json={"url": "https://example.com", "select_paths": ["(unclosed"]},
+        headers={"X-API-Key": api_key},
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_create_crawl_rejects_invalid_exclude_paths_regex(client):
+    api_key = await _signup_and_get_key(client)
+    resp = await client.post(
+        "/v1/crawl",
+        json={"url": "https://example.com", "exclude_paths": ["["]},
+        headers={"X-API-Key": api_key},
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_create_crawl_rejects_too_many_select_domains(client):
+    api_key = await _signup_and_get_key(client)
+    resp = await client.post(
+        "/v1/crawl",
+        json={"url": "https://example.com", "select_domains": [f"d{i}.example.com" for i in range(21)]},
+        headers={"X-API-Key": api_key},
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_create_crawl_round_trips_filter_fields(client, monkeypatch):
+    monkeypatch.setattr(crawl_route, "run_job", _fake_run_job)
+    api_key = await _signup_and_get_key(client)
+
+    resp = await client.post(
+        "/v1/crawl",
+        json={
+            "url": "https://example.com",
+            "select_paths": [r"^/blog/"],
+            "exclude_paths": [r"^/blog/drafts/"],
+            "select_domains": ["other.example.com"],
+            "allow_external": True,
+        },
+        headers={"X-API-Key": api_key},
+    )
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["select_paths"] == [r"^/blog/"]
+    assert body["exclude_paths"] == [r"^/blog/drafts/"]
+    assert body["select_domains"] == ["other.example.com"]
+    assert body["allow_external"] is True
+
+
+@pytest.mark.asyncio
+async def test_create_crawl_defaults_filter_fields_to_empty(client, monkeypatch):
+    monkeypatch.setattr(crawl_route, "run_job", _fake_run_job)
+    api_key = await _signup_and_get_key(client)
+
+    resp = await client.post(
+        "/v1/crawl", json={"url": "https://example.com"}, headers={"X-API-Key": api_key}
+    )
+    body = resp.json()
+    assert body["select_paths"] is None
+    assert body["exclude_paths"] is None
+    assert body["select_domains"] is None
+    assert body["allow_external"] is False
+
+
+@pytest.mark.asyncio
 async def test_map_job_not_visible_via_crawl_endpoint_id_mismatch_is_fine(client, monkeypatch):
     """/v1/map/{id} and /v1/crawl/{id} share a lookup implementation keyed
     only by job id + owner, so either path can fetch either mode's job -
