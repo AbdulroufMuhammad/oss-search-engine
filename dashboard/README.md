@@ -40,8 +40,8 @@ dashboard uses a bearer token, not cookies).
 ## Deploying
 
 The default path needs nothing extra: it's already part of the API's own
-container image (see the root `README.rst`'s "Deploying" section and
-`DEPLOY.md`) and gets served at the same URL as the API.
+container image (see the root `README.rst`'s "Deploying" section) and gets
+served at the same URL as the API.
 
 To host it separately instead, these are plain static files — any static
 host works (S3 + CloudFront, Netlify, Vercel, nginx, GitHub Pages). There's

@@ -2,7 +2,7 @@
 
 Internal API for structured web search, page extraction, and LLM-synthesized
 answers. This guide is for the ~16 devs integrating it into their own apps.
-For architecture/deployment details, see `README.rst` and `DEPLOY.md`.
+For architecture/deployment details, see `README.rst`.
 
 **Using Python or JS/Node?** `sdk/python/` and `sdk/js/` wrap everything
 below (auth headers, params, typed errors) so you don't have to hand-roll
