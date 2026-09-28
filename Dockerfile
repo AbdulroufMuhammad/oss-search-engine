@@ -1,7 +1,8 @@
 # syntax=docker/dockerfile:1.7-labs@sha256:b99fecfe00268a8b556fad7d9c37ee25d716ae08a5d7320e6d51c4dd83246894
 # Merged build for Fly.io: combines container/builder.dockerfile and
 # container/dist.dockerfile into a single multi-stage Dockerfile, then adds
-# a Caddy stage that sits in front of SearXNG and enforces bearer-token auth.
+# a final stage that runs SearXNG and the FastAPI gateway (which also
+# serves the dashboard, see api/app.py) together via container/start.sh.
 #
 # Build logic for the "builder" and "dist" stages is copied verbatim from
 # container/builder.dockerfile and container/dist.dockerfile — do not edit
@@ -53,6 +54,7 @@ COPY --chown=977:977 --from=builder /usr/local/searxng/searx/ ./searx/
 COPY --chown=977:977 ./container/ ./
 COPY --chown=977:977 ./api/ ./api/
 COPY --chown=977:977 ./shared/ ./shared/
+COPY --chown=977:977 ./dashboard/ ./dashboard/
 
 ARG CREATED="0001-01-01T00:00:00Z"
 ARG VERSION="unknown"
@@ -115,36 +117,27 @@ VOLUME $__SEARXNG_DATA_PATH
 ENTRYPOINT ["/usr/local/searxng/entrypoint.sh"]
 
 # ---------------------------------------------------------------------------
-# Stage: caddy-bin — just a source of the caddy binary
+# Stage: app (final / default target) — SearXNG + FastAPI gateway + dashboard
 # ---------------------------------------------------------------------------
-# NOTE: searxng/base is Alpine-based, so the caddy binary is pulled from the
-# musl-linked caddy:2-alpine image for libc compatibility. If searxng/base
-# ever switches to a glibc distro, switch this to `docker.io/caddy:2` too.
-FROM docker.io/caddy:2-alpine AS caddy-bin
-
-# ---------------------------------------------------------------------------
-# Stage: proxy (final / default target) — SearXNG + Caddy bearer-token gate
-# ---------------------------------------------------------------------------
-# This is the image Fly.io builds and runs. Caddy binds the public port and
-# rejects any request that doesn't present a valid bearer token, then
-# reverse-proxies authorized requests to the FastAPI intelligence gateway
-# (api/app.py) on 127.0.0.1:8083, which is the only thing that talks to
-# SearXNG directly (on 127.0.0.1:8081).
+# This is the image Fly.io builds and runs. container/start.sh backgrounds
+# SearXNG on 127.0.0.1:8081 (never reachable from outside the container)
+# and foregrounds the FastAPI gateway (api/app.py) on the public port,
+# 0.0.0.0:8080 - it's the only thing that talks to SearXNG directly, and it
+# also serves the dashboard (mounted in api/app.py) from the same process.
 #
-# The token is provided at runtime via the AUTH_TOKEN env var, which should
-# be set as a Fly secret:
-#   fly secrets set AUTH_TOKEN=$(openssl rand -hex 32)
-# Callers must send: Authorization: Bearer <AUTH_TOKEN>
-FROM dist AS proxy
+# No separate auth wrapper sits in front of it (there used to be one, gated
+# by a shared AUTH_TOKEN via Caddy - see git history if you need it back for
+# some other reason): the gateway has its own route-level auth, and that
+# wrapper gated /v1/auth/signup and the dashboard too, which broke
+# self-service. See README.rst's "Deploying" section.
+FROM dist AS app
 
 # Stays root for the lifetime of the container: start.sh backgrounds
 # entrypoint.sh (which itself drops privilege where it can, e.g. chown) and
-# foregrounds caddy binding port 8080, so this stage doesn't switch back to
-# the non-root searxng user the base image normally runs as.
+# foregrounds the FastAPI gateway, so this stage doesn't switch back to the
+# non-root searxng user the base image normally runs as.
 USER root
 
-COPY --from=caddy-bin /usr/bin/caddy /usr/local/bin/caddy
-COPY ./container/Caddyfile /etc/caddy/Caddyfile
 COPY ./container/start.sh /usr/local/searxng/start.sh
 RUN chmod +x /usr/local/searxng/start.sh
 

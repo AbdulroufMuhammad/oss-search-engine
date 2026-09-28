@@ -591,22 +591,28 @@ Configuration
   result is considered weak enough to trigger the Tavily fallback
   (default ``0.35``)
 
+Deploying
+=========
+
+The root ``Dockerfile`` builds a single image containing the search engine,
+the FastAPI gateway (``api/``), and the dashboard (``dashboard/``) —
+``api/app.py`` mounts the dashboard directly, so it ships in the same
+deployment as the API with no separate static hosting needed.
+``container/start.sh`` runs both the engine (internal-only,
+``127.0.0.1:8081``) and the gateway (public, ``0.0.0.0:8080``) in one
+container. There's no separate auth wrapper in front of the gateway: the
+app's own auth is the only gate — JWT sessions for the dashboard, per-key
+auth for every other endpoint above — and ``/v1/auth/signup`` plus the
+dashboard are intentionally public, so self-service signup works out of the
+box. See ``DEPLOY.md`` for the Fly.io-specific steps.
+
 Deploying on AWS
-=================
+-----------------
 
-This repo also has a Fly.io-specific deployment path (``Dockerfile``,
-``container/start.sh``, ``fly.toml``, ``DEPLOY.md``) that puts Caddy in
-front of everything and gates the *entire* app — including
-``/v1/auth/signup`` and the dashboard — behind one shared ``AUTH_TOKEN``.
-That predates the auth system above and actively conflicts with it: nobody
-can reach self-service signup without already having that shared secret.
-
-**On AWS, don't carry that wrapper over.** Run the API container (built from
-the ``builder``/``dist`` stages in ``Dockerfile``, or your own image running
-``uvicorn api.app:app`` / ``granian api.app:app``) directly behind your load
-balancer, terminate TLS there, and let the app's own auth be the only gate:
-JWT sessions for the dashboard, per-key auth for every other endpoint above.
-Concretely, for a multi-instance setup (e.g. ECS Fargate/EC2 behind an ALB):
+For a multi-instance setup (e.g. ECS Fargate/EC2 behind an ALB), run the
+same container (or your own image running ``uvicorn api.app:app`` /
+``granian api.app:app``) directly behind your load balancer, terminate TLS
+there, and add:
 
 - **ElastiCache** (Redis or Valkey engine, both speak the same protocol this
   app uses) for ``VALKEY_URL`` — this is what makes rate limiting and the

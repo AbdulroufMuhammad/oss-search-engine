@@ -6,42 +6,47 @@ endpoints on the API (see the repo root `README.rst`).
 
 ## Run it locally
 
-1. Start the API (see the root README's Quick start).
-2. Serve this directory as static files, e.g.:
+By default this is bundled with the API — `api/app.py` mounts this
+directory, so starting the API (see the root README's Quick start) is
+enough; open `http://127.0.0.1:8000/`. Sign up, then create an API key from
+the dashboard — it's shown once, at creation.
 
-   ```bash
-   cd dashboard
-   python3 -m http.server 8080
-   ```
+To run it as a separate process instead (e.g. while iterating on the
+frontend with a different reload setup), serve this directory yourself:
 
-3. Open `http://127.0.0.1:8080`. Sign up, then create an API key from the
-   dashboard — it's shown once, at creation.
+```bash
+cd dashboard
+python3 -m http.server 8080
+```
+
+Then edit `config.js` to point at the API (see Configuration below) and
+open `http://127.0.0.1:8080`.
 
 ## Configuration
 
-Edit `config.js` to point at your API deployment:
+`config.js` defaults to `window.SEEKLY_API_BASE = ""` — same-origin, which
+is correct when the API serves this directory itself (the default). Only
+edit it if you're hosting the dashboard separately from the API:
 
 ```js
 window.SEEKLY_API_BASE = "https://api.your-domain.com";
 ```
 
-The API must allow the dashboard's origin via CORS — set
+In that case the API must also allow the dashboard's origin via CORS — set
 `CORS_ALLOWED_ORIGINS` on the API (comma-separated list of origins;
 defaults to `*` for local development, which is fine here since the
 dashboard uses a bearer token, not cookies).
 
 ## Deploying
 
-These are plain static files — any static host works (S3 + CloudFront,
-Netlify, Vercel, nginx, GitHub Pages). There's no build step: just publish
-`index.html`, `dashboard.html`, `styles.css`, `api.js`, and `config.js`
-(with `config.js` edited for your API's URL) as-is.
+The default path needs nothing extra: it's already part of the API's own
+container image (see the root `README.rst`'s "Deploying" section and
+`DEPLOY.md`) and gets served at the same URL as the API.
 
-If the API is deployed behind the repo's old Fly.io Caddy wrapper (see the
-root `DEPLOY.md`), this won't work — that wrapper requires a shared
-`AUTH_TOKEN` on every request, including signup, which defeats self-service.
-It needs to be dropped (see "Deploying on AWS" in the root `README.rst`) for
-this dashboard to be usable as intended.
+To host it separately instead, these are plain static files — any static
+host works (S3 + CloudFront, Netlify, Vercel, nginx, GitHub Pages). There's
+no build step: just publish `index.html`, `dashboard.html`, `styles.css`,
+`api.js`, and `config.js` (with `config.js` edited for your API's URL) as-is.
 
 ## What's here
 

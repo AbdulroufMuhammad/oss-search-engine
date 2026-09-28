@@ -1,19 +1,19 @@
 # Deploying to Fly.io
 
-> **Note:** this `AUTH_TOKEN`/Caddy gate predates the app's own user
-> accounts and API keys (see the root `README.rst`) and covers the *whole*
-> app, including `/v1/auth/signup` and the dashboard — so self-service
-> signup doesn't work behind it without also handing out `AUTH_TOKEN`. If
-> you're deploying on AWS instead, see "Deploying on AWS" in `README.rst` —
-> that path drops this wrapper and uses the app's own auth as the gate.
-
 This repo builds a single image (root `Dockerfile`) containing a
-SearXNG-based search engine (see the root README's *Credits* section) plus
-a Caddy reverse proxy that enforces a bearer-token check
-(`container/Caddyfile`, `container/start.sh`) — see those files for how the
-token gate works. Fly's public port (8080) is Caddy; the search engine
-itself only listens on `127.0.0.1:8081` inside the container and is never
-directly reachable.
+SearXNG-based search engine (see the root README's *Credits* section), the
+FastAPI gateway (`api/`), and the dashboard (`dashboard/`) — see
+`container/start.sh` for how the two processes are wired together. Fly's
+public port (8080) is the FastAPI gateway; SearXNG itself only listens on
+`127.0.0.1:8081` inside the container and is never directly reachable.
+
+There's no separate auth wrapper in front of the gateway — it has its own
+route-level auth (API keys for `/v1/search`, `/v1/extract`, `/v1/crawl`,
+`/v1/map`; JWT sessions for `/v1/keys`), and `/v1/auth/signup` plus the
+dashboard are meant to be publicly reachable for self-service signup. See
+the root `README.rst` for the full auth model and required env vars
+(`JWT_SECRET` in particular — set a real one, not the random per-process
+fallback).
 
 ## 1. Launch the app (no deploy yet)
 
@@ -24,14 +24,17 @@ fly launch --no-deploy
 This creates/updates `fly.toml` with your app name and region. It should
 detect the root `Dockerfile` automatically (no separate Fly builder needed).
 
-## 2. Set the auth token secret
+## 2. Set required secrets
 
 ```sh
-fly secrets set AUTH_TOKEN=$(openssl rand -hex 32)
+fly secrets set JWT_SECRET=$(openssl rand -hex 32)
 ```
 
-Keep a copy of this value somewhere safe (e.g. a secrets manager) — you'll
-need to hand it to whatever service calls this instance.
+Set `DATABASE_URL`/`VALKEY_URL`/any other config from `README.rst`'s
+Configuration section as needed for your setup; SQLite + the in-process
+rate-limit/cache fallback both work for a single-instance deployment, but
+neither survives across multiple instances — see README.rst's "Deploying
+on AWS" section if you need that.
 
 ## 3. Deploy
 
@@ -42,14 +45,11 @@ fly deploy
 ## 4. Test
 
 ```sh
-curl -H "Authorization: Bearer <AUTH_TOKEN>" \
-  "https://<your-app-name>.fly.dev/search?q=test&format=json"
-```
+# Dashboard
+curl -i "https://<your-app-name>.fly.dev/"
 
-A request without the header (or with the wrong token) should get a 401 from
-Caddy, e.g.:
-
-```sh
-curl -i "https://<your-app-name>.fly.dev/search?q=test&format=json"
-# HTTP/2 401
+# Sign up, then search with the resulting API key
+curl -X POST "https://<your-app-name>.fly.dev/v1/auth/signup" \
+  -H "Content-Type: application/json" \
+  -d '{"email": "you@example.com", "password": "..."}'
 ```
