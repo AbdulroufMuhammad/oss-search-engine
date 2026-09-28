@@ -19,7 +19,7 @@ general:
 
 brand:
   docs_url: https://docs.searxng.org/
-  public_instances: https://searx.space
+  public_instances: ''
   wiki_url: https://github.com/searxng/searxng/wiki
   issue_url: https://github.com/searxng/searxng/issues
   # custom:
