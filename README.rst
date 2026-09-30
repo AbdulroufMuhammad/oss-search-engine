@@ -518,7 +518,10 @@ Dashboard
 A static, no-build-step frontend lives in ``dashboard/`` for self-service
 signup, login, and API key management (create/list/revoke). It talks
 directly to the ``/v1/auth`` and ``/v1/keys`` endpoints above — see
-``dashboard/README.md`` for how to serve it.
+``dashboard/README.md`` for how to serve it. The landing page (and the
+dashboard's topbar) links to ``/guide`` — this guide rendered as a styled
+HTML page (``api/routes/guide.py``) — and to ``/docs``, FastAPI's
+auto-generated interactive endpoint reference.
 
 Client SDKs
 ===========

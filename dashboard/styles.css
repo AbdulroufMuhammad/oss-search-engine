@@ -129,6 +129,57 @@ a {
   line-height: 1.5;
 }
 
+.hero-links {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.features {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 14px;
+  max-width: 720px;
+  margin: 0 auto 40px;
+}
+
+.feature {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+.feature h3 {
+  margin: 0 0 6px;
+  font-size: 0.95rem;
+}
+
+.feature p {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.code-sample {
+  max-width: 640px;
+  margin: 0 auto 40px;
+}
+
+.code-sample pre {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  overflow-x: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.82rem;
+  color: var(--text);
+  line-height: 1.5;
+}
+
 .auth-card {
   max-width: 380px;
   margin: 0 auto;

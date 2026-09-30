@@ -10,6 +10,10 @@
   <div class="container">
     <div class="topbar">
       <div class="brand">Seekly</div>
+      <div class="hero-links">
+        <a class="btn btn-ghost" href="/guide">Guide</a>
+        <a class="btn btn-ghost" href="/docs">API reference</a>
+      </div>
     </div>
 
     <div class="hero">
@@ -19,6 +23,29 @@
         <code>/v1/extract</code> — normalized results, deterministic ranking,
         and LLM-synthesized answers, all from one endpoint.
       </p>
+    </div>
+
+    <div class="features">
+      <div class="feature">
+        <h3>Structured search</h3>
+        <p>Normalized results with stable URLs, snippets, and ranking scores — no HTML scraping.</p>
+      </div>
+      <div class="feature">
+        <h3>Page extraction</h3>
+        <p>Clean, LLM-ready text and passages from any URL, single or batched.</p>
+      </div>
+      <div class="feature">
+        <h3>Crawl &amp; map</h3>
+        <p>Bounded same-domain crawling and site mapping as background jobs.</p>
+      </div>
+      <div class="feature">
+        <h3>Synthesized answers</h3>
+        <p>Optional LLM-generated answers and semantic re-ranking on top of raw results.</p>
+      </div>
+    </div>
+
+    <div class="code-sample">
+      <pre><code id="code-sample-curl"></code></pre>
     </div>
 
     <div class="card auth-card">
@@ -68,6 +95,9 @@
     if (Auth.isLoggedIn()) {
       window.location.href = "dashboard.html";
     }
+
+    document.getElementById("code-sample-curl").textContent =
+      `curl "${window.location.origin}/v1/search?q=rust+async+runtimes" \\\n  -H "X-API-Key: sk_live_..."`;
 
     const tabs = document.querySelectorAll(".tab");
     const loginForm = document.getElementById("login-form");

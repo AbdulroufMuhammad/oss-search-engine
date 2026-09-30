@@ -50,7 +50,8 @@ no build step: just publish `index.html`, `dashboard.html`, `styles.css`,
 
 ## What's here
 
-- `index.html` — landing page + sign in / sign up
+- `index.html` — landing page (feature highlights, a code sample, links to
+  the guide and API reference) + sign in / sign up
 - `dashboard.html` — list, create, and revoke API keys (requires being
   signed in; redirects to `index.html` otherwise)
 - `api.js` — thin fetch wrapper around the auth/keys endpoints, plus
